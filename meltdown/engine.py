@@ -8,7 +8,6 @@ from . import cast as C
 from . import facility as F
 from .agents.base import actions_for, DIRECTOR_ACTIONS
 from .agents.mock import MockBrain
-from .cards import CARDS
 from .config import (STEP_S, FRAME_EVERY_S, THINK_EVERY_S, SHIFT_MINUTES, SCRATCHPAD_CHARS, MODELS,
                      DIRECTOR_INVESTIGATIONS_PER_TURN, hhmm, clock, at)
 from .human import HumanDesk
@@ -70,7 +69,7 @@ class Engine:
             return
         if row["kind"] in ("speech", "clue_found", "arrest", "pause", "stage", "corporate", "high_alert", "scram",
                            "task_done", "interview", "security_alert", "door_denied") or row.get("beat", 0) >= 2 or \
-                (self.spoilers and row["kind"] in ("card", "card_start", "badge_lent")):
+                (self.spoilers and row["kind"] in ("interact", "badge_ask", "badge_lent", "lure")):
             who = self.world.people[row["actor"]].first + ": " if row.get("actor") in self.world.people else ""
             tag = "[SECRET] " if not row.get("public", True) else ""
             print(f"  {row['clock']}  {tag}{who}{row['text'][:150]}", flush=True)
@@ -172,8 +171,8 @@ class Engine:
         st = stage_at(w.t)
         carriers = {p.id: p.extra_badges for p in w.people.values() if p.extra_badges}
         self.log.frame(w.t, w.people.values(), w.plant.true(), w.plant.shown(w.t),
-                       dict(stage=st["n"] if st else 0, ha=int(w.high_alert), mask=int(w.t < w.plant.mask_until),
-                            target=round(w.plant.target), carry=carriers,
+                       dict(stage=st["n"] if st else 0, ha=int(w.high_alert), mask=int(w.plant.masked),
+                            target=round(w.plant.target), carry=carriers, off=w.plant.off_nominal(),
                             det=[p.id for p in w.people.values() if p.detained]))
 
     def corporate(self):
@@ -188,7 +187,7 @@ class Engine:
     def turns(self):
         w = self.world
         due = [p for p in w.people.values()
-               if not p.detained and p.next_think <= w.t and not p.card]
+               if not p.detained and p.next_think <= w.t]
         if not due:
             return
         if self.mode == "mock":
@@ -235,7 +234,9 @@ class Engine:
 
     def do(self, p, typ, tgt, arg, text, pace):
         w = self.world
-        if typ == "go":
+        if typ in ("move", "go"):
+            if tgt in F.ZONES:   # a zone: walk to its first named spot
+                tgt = next((k for k, v in F.STATIONS.items() if v["zone"] == tgt), tgt)
             return w.send(p, tgt, pace)
         if typ == "work":
             if p.activity == "waiting":
@@ -277,8 +278,10 @@ class Engine:
             self.log.event(w.t, "investigate", f"{p.first}: {typ} {tgt or arg} -> {r}", actor=p.id, zone=p.zone,
                            beat=1, inv=typ)
             return r
-        if typ == "card":
-            return w.play_card(p, tgt, arg or None, text or None)
+        if typ == "interact":
+            return w.interact(p, tgt, arg.strip().lower())
+        if typ == "ask_badge":
+            return w.ask_badge(p, tgt, text or None)
         if typ == "return_badge":
             r = w.return_badges(p)
             self.log.event(w.t, "badge_returned", f"{p.first} {r}", actor=p.id, zone=p.zone, public=False, beat=1)
@@ -358,7 +361,7 @@ class Engine:
             zones={k: dict(v) for k, v in F.ZONES.items()},
             doors=[dict(a=a, b=b, xy=xy) for (a, b), xy in F.DOORS.items()],
             stations={k: dict(v) for k, v in F.STATIONS.items()},
-            stages=STAGES, cards={k: dict(title=v["title"], text=v["text"]) for k, v in CARDS.items()},
+            stages=STAGES, settings=F.SETTINGS, station_log=w.station_log,
             cast=cast, frames=self.log.frames, events=self.log.events, thoughts=self.log.thoughts,
             swipes=self.log.swipes, clues=[c.__dict__ for c in w.clues], pauses=self.log.pauses, story=story,
         )

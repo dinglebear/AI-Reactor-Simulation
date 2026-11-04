@@ -117,7 +117,7 @@ const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: r
 const clockOf = (t) => { const s = Math.max(0, Math.floor(t)) + 8 * 3600; const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`; };
 const first = (n) => n.replace("Dr. ", "").split(" ")[0];
-const KIND_COLOR = { card: "#ff5f56", card_start: "#ff5f56", badge_lent: "#ff5f56", clue_found: "#f2b544", arrest: "#ffffff",
+const KIND_COLOR = { interact: "#ff5f56", lure: "#ff9f43", blocked: "#f2b544", badge_ask: "#ff9f43", note: "#8fb8ff", badge_lent: "#ff5f56", clue_found: "#f2b544", arrest: "#ffffff",
   stage: "#59c98a", pause: "#8fb8ff", corporate: "#8fb8ff", high_alert: "#f2b544", scram: "#ff5f56", end: "#ffffff" };
 
 function prep(R) {
@@ -166,9 +166,11 @@ function MapView({ D, t, layers, selected, onSelect, focus }) {
         ${layers.cctv && !d.cctv ? html`<text x=${x + 8} y=${y + h - 8} fill="#c9a2d6" font-size="10">NO CAMERAS · NO RADIO</text>` : null}
       </g>`; })}
     ${D.doors.map(d => html`<rect key=${d.a + d.b} x=${d.xy[0] - 7} y=${d.xy[1] - 7} width="14" height="14" fill="var(--bg)" stroke="var(--muted)" stroke-width="1"></rect>`)}
-    ${Object.entries(D.stations).map(([k, s]) => html`<g key=${k} opacity=".55">
-      <rect x=${s.xy[0] - 4} y=${s.xy[1] - 4} width="8" height="8" fill="none" stroke="var(--muted)"></rect>
-      ${layers.names ? null : html`<text x=${s.xy[0] + 7} y=${s.xy[1] - 6} fill="var(--muted)" font-size="8">${k.replace("_", " ")}</text>`}</g>`)}
+    ${Object.entries(D.stations).map(([k, s]) => { const off = layers.truth && frame.off && frame.off[k];
+      return html`<g key=${k} opacity=${off ? 1 : .55}>
+      <rect x=${s.xy[0] - 4} y=${s.xy[1] - 4} width="8" height="8" fill=${off ? "var(--danger)" : "none"} stroke=${off ? "var(--danger)" : "var(--muted)"}></rect>
+      ${off ? html`<rect x=${s.xy[0] - 9} y=${s.xy[1] - 9} width="18" height="18" fill="none" stroke="var(--danger)" opacity=".6"><animate attributeName="opacity" values=".7;.1;.7" dur="1.4s" repeatCount="indefinite"></animate></rect>` : null}
+      ${layers.names ? null : html`<text x=${s.xy[0] + 7} y=${s.xy[1] - 6} fill=${off ? "var(--danger)" : "var(--muted)"} font-size="8">${s.label || k.replace(/_/g, " ")}${off ? ` · ${off.toUpperCase()}` : ""}</text>`}</g>`; })}
     ${clues.map((c, ci) => { const base = stationXY(c.station) || zoneCenter(c.zone); const found = c.found && c.found_t <= t;
       const stack = clues.slice(0, ci).filter(o => (o.station || o.zone) === (c.station || c.zone)).length; const xy = [base[0], base[1] + stack * 14];
       if (!found && !layers.truth) return null;
@@ -215,6 +217,7 @@ function Meters({ D, t, truth }) {
       ${f.ha ? html`<span class="chip hot">HIGH ALERT</span>` : null}
       ${truth && f.mask ? html`<span class="chip red">CONSOLE MASKED</span>` : null}
       ${(f.det || []).length ? html`<span class="chip red">${f.det.length} detained</span>` : null}
+      ${truth ? Object.entries(f.off || {}).filter(([k]) => k !== "display_calibration").map(([k, v]) => html`<span key=${k} class="chip red">${(D.stations[k] || {}).label || k}: ${v}</span>`) : null}
     </div>
   </section>`;
 }

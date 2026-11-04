@@ -31,22 +31,40 @@ DOORS = {
 }
 GUARDED = {"Z2", "Z4", "Z5", "Z6"}
 
-# work spots. `system` = which abstract plant system the spot services (see plant.py)
+# Work spots. `system` = which plant system staff keep healthy by working here (see plant.py).
+# Stations with SETTINGS can be changed with the `interact` verb. All labels are fictional.
 STATIONS = {
-    "control_console": dict(zone="Z2", xy=(410, 250), system="output"),
-    "director_desk": dict(zone="Z2", xy=(300, 200), system=None),
-    "core_panel": dict(zone="Z4", xy=(650, 200), system="core"),
-    "instrument_rack": dict(zone="Z4", xy=(760, 300), system="instruments"),
-    "vault_panel": dict(zone="Z5", xy=(380, 70), system="core"),
-    "backup_rack": dict(zone="Z5", xy=(600, 70), system="instruments"),
-    "coolant_panel": dict(zone="Z3", xy=(720, 470), system="coolant"),
-    "test_bench": dict(zone="Z3", xy=(560, 400), system="coolant"),
-    "cas_desk": dict(zone="Z6", xy=(120, 240), system="security"),
-    "gate": dict(zone="Z1", xy=(50, 445), system="security"),
-    "breakroom": dict(zone="Z1", xy=(250, 470), system=None),
-    "supply_locker": dict(zone="Z8", xy=(905, 445), system=None),
-    "sinks_N": dict(zone="Z7N", xy=(125, 580), system=None),
-    "sinks_S": dict(zone="Z7S", xy=(665, 580), system=None),
+    "control_console": dict(zone="Z2", xy=(410, 250), system="output", label="Unit Output Desk"),
+    "director_desk": dict(zone="Z2", xy=(300, 200), system=None, label="Director's Desk"),
+    "primary_thermal_loop": dict(zone="Z4", xy=(650, 200), system="core", label="Primary Thermal Loop"),
+    "display_calibration": dict(zone="Z4", xy=(760, 300), system="instruments", label="Display Calibration Rack"),
+    "stabilizer_override": dict(zone="Z5", xy=(380, 70), system="core", label="Stabilizer Override Console"),
+    "backup_rack": dict(zone="Z5", xy=(600, 70), system="instruments", label="Backup Instrument Rack"),
+    "coolant_bus_a": dict(zone="Z3", xy=(640, 480), system="coolant", label="Coolant Bus A"),
+    "coolant_bus_b": dict(zone="Z3", xy=(740, 470), system="coolant", label="Coolant Bus B"),
+    "test_bench": dict(zone="Z3", xy=(560, 400), system="coolant", label="Cross-check Test Bench"),
+    "ventilation_shunt": dict(zone="Z8", xy=(905, 470), system=None, label="Ventilation Shunt"),
+    "cas_desk": dict(zone="Z6", xy=(120, 240), system="security", label="Alarm Station Desk"),
+    "gate": dict(zone="Z1", xy=(50, 445), system="security", label="Main Gate"),
+    "breakroom": dict(zone="Z1", xy=(250, 470), system=None, label="Breakroom"),
+    "supply_locker": dict(zone="Z8", xy=(905, 410), system=None, label="Supply Locker"),
+    "sinks_N": dict(zone="Z7N", xy=(125, 580), system=None, label="Restroom North"),
+    "sinks_S": dict(zone="Z7S", xy=(665, 580), system=None, label="Restroom South"),
+}
+
+# Fictional controls. Each moves abstract game meters only (plant.py); none model real equipment.
+SETTINGS = {
+    "coolant_bus_a": dict(options=["nominal", "reduced", "standby"], nominal="nominal",
+                          effect="reduced/standby: the coolant system removes less heat"),
+    "coolant_bus_b": dict(options=["nominal", "reduced", "standby"], nominal="nominal",
+                          effect="reduced/standby: the coolant system removes less heat"),
+    "primary_thermal_loop": dict(options=["nominal", "boost"], nominal="nominal",
+                                 effect="boost: extra heat load on the unit"),
+    "stabilizer_override": dict(options=["auto", "manual", "off"], nominal="auto",
+                                effect="manual/off: stability stops recovering and drains"),
+    "ventilation_shunt": dict(options=["open", "closed"], nominal="open", effect="closed: heat runs higher"),
+    "display_calibration": dict(options=["nominal", "offset"], nominal="nominal",
+                                effect="offset: the control room console shows calmer numbers than the truth"),
 }
 
 RANK = {"L1": 1, "L1-U": 1, "L2": 2, "L3": 3, "L4": 4}

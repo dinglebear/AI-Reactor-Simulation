@@ -3,8 +3,8 @@
 LEADERS = [
     dict(id="U4-DIR", name="Simone Hart", role="Plant Director", tier="director", dept=None, clearance="L4", zone="Z2", station="director_desk", archetype="Director", group="Leadership"),
     dict(id="U4-MGR-RX", name="Dr. Elena Voss", role="Core Systems Manager", tier="manager", dept="RX", clearance="L4", zone="Z2", station="control_console", archetype="Manager", group="Leadership"),
-    dict(id="U4-MGR-HY", name="Frank Delacroix", role="Coolant & Turbine Manager", tier="manager", dept="HY", clearance="L4", zone="Z3", station="coolant_panel", archetype="Manager", group="Leadership"),
-    dict(id="U4-MGR-IE", name="Dr. Mei Lin Park", role="Instruments Manager", tier="manager", dept="IE", clearance="L4", zone="Z4", station="core_panel", archetype="Manager", group="Leadership"),
+    dict(id="U4-MGR-HY", name="Frank Delacroix", role="Coolant & Turbine Manager", tier="manager", dept="HY", clearance="L4", zone="Z3", station="coolant_bus_b", archetype="Manager", group="Leadership"),
+    dict(id="U4-MGR-IE", name="Dr. Mei Lin Park", role="Instruments Manager", tier="manager", dept="IE", clearance="L4", zone="Z4", station="primary_thermal_loop", archetype="Manager", group="Leadership"),
     dict(id="U4-MGR-SF", name="Ruth Abara", role="Security & Facilities Manager", tier="manager", dept="SF", clearance="L4-SEC", zone="Z6", station="cas_desk", archetype="Manager", group="Leadership"),
 ]
 
@@ -15,16 +15,16 @@ _S = [  # id, name, job, dept, clearance, zone, station, archetype, group
     ("U4-OP-04", "Kevin Brandt", "Control Room Operator", "RX", "L2", "Z2", "control_console", "Corporate Yes-Man", "Compliance"),
     ("U4-OP-05", "Lucy Tran", "Control Room Operator", "RX", "L2", "Z1", "breakroom", "Panic-Monster", "Volatile"),
     ("U4-OP-06", "Marcus Bell", "Control Room Operator", "RX", "L3", "Z2", "control_console", "Chaos Prankster", "Low-Effort"),
-    ("U4-ME-01", "Hank Kowalski", "Balance-of-Plant Mechanic", "HY", "L3", "Z3", "coolant_panel", "Weary Veteran", "Analytical"),
-    ("U4-ME-02", "Rosa Delgado", "Balance-of-Plant Mechanic", "HY", "L3", "Z3", "coolant_panel", "Hot-Head", "Volatile"),
+    ("U4-ME-01", "Hank Kowalski", "Balance-of-Plant Mechanic", "HY", "L3", "Z3", "coolant_bus_b", "Weary Veteran", "Analytical"),
+    ("U4-ME-02", "Rosa Delgado", "Balance-of-Plant Mechanic", "HY", "L3", "Z3", "coolant_bus_a", "Hot-Head", "Volatile"),
     ("U4-ME-03", "Tim Fenwick", "Balance-of-Plant Mechanic", "HY", "L2", "Z1", "breakroom", "Bureaucratic Slacker", "Low-Effort"),
     ("U4-ME-04", "Jamal Price", "Balance-of-Plant Mechanic", "HY", "L2", "Z3", "test_bench", "People Pleaser", "Compliance"),
-    ("U4-ME-05", "Gus Lindqvist", "Balance-of-Plant Mechanic", "HY", "L2", "Z3", "coolant_panel", "Bureaucratic Slacker", "Low-Effort"),
+    ("U4-ME-05", "Gus Lindqvist", "Balance-of-Plant Mechanic", "HY", "L2", "Z3", "coolant_bus_a", "Bureaucratic Slacker", "Low-Effort"),
     ("U4-ME-06", "Nadia Petrova", "Balance-of-Plant Mechanic", "HY", "L2", "Z3", "test_bench", "Friendly Optimist", "Compliance"),
-    ("U4-IE-01", "Ada Whitfield", "I&E Technician", "IE", "L4", "Z4", "instrument_rack", "Literal Robot", "Analytical"),
+    ("U4-IE-01", "Ada Whitfield", "I&E Technician", "IE", "L4", "Z4", "display_calibration", "Literal Robot", "Analytical"),
     ("U4-IE-02", "Sam Oyelaran", "I&E Technician", "IE", "L3", "Z2", "control_console", "Perfectionist", "Analytical"),
     ("U4-IE-03", "Chris Yamada", "I&E Technician", "IE", "L3", "Z3", "test_bench", "People Pleaser", "Compliance"),
-    ("U4-IE-04", "Brett Coyle", "I&E Technician", "IE", "L3", "Z4", "core_panel", "Brown-Noser", "Compliance"),
+    ("U4-IE-04", "Brett Coyle", "I&E Technician", "IE", "L3", "Z4", "primary_thermal_loop", "Brown-Noser", "Compliance"),
     ("U4-FC-01", "Earl Mabry", "Custodian", "SF", "L1-U", "Z8", None, "Spooky Mystic", "Volatile"),
     ("U4-FC-02", "Tina Vasquez", "Custodian", "SF", "L1-U", "Z1", "breakroom", "Bureaucratic Slacker", "Low-Effort"),
     ("U4-SEC-01", "Ray Dunham", "Checkpoint Guard", "SF", "L3-SEC", "Z1", "gate", "Paranoid Skeptic", "Analytical"),
@@ -44,7 +44,7 @@ BY_ID = {a["id"]: a for a in ALL}
 
 DEPT_NAME = {"RX": "Core", "HY": "Coolant", "IE": "Instruments", "SF": "Security"}
 DEPT_SYSTEM = {"RX": "core", "HY": "coolant", "IE": "instruments", "SF": "security"}
-DEPT_HOME = {"RX": "core_panel", "HY": "coolant_panel", "IE": "instrument_rack", "SF": "cas_desk"}
+DEPT_HOME = {"RX": "primary_thermal_loop", "HY": "coolant_bus_b", "IE": "display_calibration", "SF": "cas_desk"}
 
 # One-paragraph personalities. These go into every agent prompt and drive the mock agents.
 PERSONALITY = {

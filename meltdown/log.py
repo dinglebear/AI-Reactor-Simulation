@@ -45,7 +45,7 @@ class RunLog:
 
     def clue(self, t, c, what, by=None):
         row = dict(t=round(t, 1), id=c.id, type=c.type, zone=c.zone, station=c.station, text=c.text,
-                   suspects=c.suspects, card=c.card, what=what, by=by)
+                   suspects=c.suspects, holder=c.holder, what=what, by=by)
         self.clues.append(row)
         self._write(self._ev, dict(kind="clue_" + what, **row))
 

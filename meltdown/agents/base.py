@@ -3,14 +3,16 @@ from __future__ import annotations
 
 from .. import cast as C
 from .. import facility as F
-from ..cards import hand_text
 from ..config import hhmm, SCRATCHPAD_CHARS, DIRECTOR_INVESTIGATIONS_PER_TURN
 from ..plant import STAGES
 
 CHANNELS = ["none", "say", "whisper", "radio", "exec", "security"]
 
 STAFF_ACTIONS = {
-    "go": "walk to a station. target = station name. Set pace to sprint only if it's urgent: people notice running.",
+    "move": "walk to a station (or a zone id). target = station name. Doors log your badge. Set pace to sprint only "
+            "if it's urgent: people notice running.",
+    "interact": "change a station's setting. target = station, arg = setting. You must be standing at that station. "
+                "If someone else is working at it, they stop you and raise the alarm.",
     "work": "stay at your current station and keep its system healthy",
     "restroom": "go to the nearest restroom (no cameras, no radio, whispers only)",
     "wait": "do nothing this turn",
@@ -24,8 +26,7 @@ SECURITY_MANAGER_EXTRA = {
     "pull_cctv": "review camera footage. target = zone id (Z1..Z8)",
 }
 SABOTEUR_EXTRA = {
-    "card": "play a saboteur card. target = card name, arg = person id when the card needs one, text = what you "
-            "whisper or write",
+    "ask_badge": "quietly ask someone in your zone to lend you their badge. target = person id, text = your excuse",
     "return_badge": "hand back borrowed badges to their owners in the same zone",
     "message_handler": "send a private message to your handler outside the plant. text = message. The game pauses "
                        "until they reply.",
@@ -36,7 +37,8 @@ DIRECTOR_ACTIONS = {
                   "to you",
     "audit_badges": "INVESTIGATION. Review the badge ledger for contradictions (2 min)",
     "pull_cctv": "INVESTIGATION. Review a zone's cameras (1 min). target = zone id",
-    "inspect": "INVESTIGATION. Send someone to inspect a station for tampering. target = station, arg = person id",
+    "inspect": "INVESTIGATION. Send someone to a station: they read its change log and reset it to normal. "
+               "target = station, arg = person id",
     "cross_check": "INVESTIGATION. Send someone to the test bench to compare true readings with the console. "
                    "arg = person id",
     "interview": "INVESTIGATION. Summon a person to your desk for questions. target = person id",
@@ -48,6 +50,8 @@ DIRECTOR_ACTIONS = {
     "order": "send anyone somewhere. target = person id, arg = station name",
     "wait": "do nothing this turn",
 }
+STATIONS_TEXT = "\n".join(f"- {k} ({F.STATIONS[k]['label']}, {F.STATIONS[k]['zone']}): {', '.join(v['options'])}; "
+                          f"normal = {v['nominal']}. {v['effect']}" for k, v in F.SETTINGS.items())
 
 
 def actions_for(p) -> dict:
@@ -101,7 +105,7 @@ coolant system), stability, and the INCIDENT meter. If INCIDENT reaches 100 the 
 the saboteur. Four systems (core, coolant, instruments, security) wear down unless staff work at their stations.
 
 HIDDEN ROLE: one of the four department managers is secretly a saboteur working for a rival. Their moves leave
-clues (badge ledger, cameras, tamper marks, logbooks, testimony, radio). The Director wins by arresting the
+clues (badge ledger, cameras, station logs, witness testimony, radio). The Director wins by arresting the
 saboteur with two different types of clue. Everyone else wins if the plant stays safe and the saboteur is caught.
 
 THE MAP:
@@ -109,12 +113,19 @@ THE MAP:
                 f"radio {'yes' if d['radio'] else 'NO'})" for z, d in F.ZONES.items()) + """
 Doors: """ + ", ".join(f"{a}-{b}" for a, b in F.DOORS) + """
 Stations: """ + ", ".join(f"{k} ({v['zone']}, {v['system'] or 'no system'})" for k, v in F.STATIONS.items()) + """
+Station controls (fictional; each only moves the game meters). Use `interact` while standing at the station:
+""" + STATIONS_TEXT + """
+A station that someone is working at can't be changed without them stopping you and raising the alarm.
+Every change is written to the station's log. A station stays logged in to its regular operator for about 10
+minutes after they step away, so a change made in that window is logged under their badge; otherwise it is logged
+under the badge you last used at a door. If a manager tells an operator to "leave it" at a new setting, the
+operator may go along with it, and will remember who said so.
 
 MOVING: walking is normal. Sprinting is fast but anyone nearby and any camera notices, and it looks suspicious.
 Badges: every door with a reader logs a swipe. Restrooms have no reader, no cameras and no radio: only whispers work.
 You get restroom urges over time; ignore them too long and you will have to go anyway.
 
-TALKING: channel 'say' = everyone in your zone hears; 'whisper' = one person in your zone (set `to`);
+TALKING (the speak verb): fill `speech`, `channel` and `to`. Channel 'say' = everyone in your zone hears; 'whisper' = one person in your zone (set `to`);
 'radio' = your department; 'exec' = Director and managers; 'security' = security team and Director.
 
 Each turn, answer with one JSON object. Keep `thought` honest and in character: it is private and only appears in
@@ -141,16 +152,21 @@ def system_prompt(world, p) -> str:
                 "wants the pass; you want a plant that's still standing.")
     elif p.saboteur:
         goal = ("SECRET ROLE: you are the SABOTEUR. Nobody knows. Your handler wants INCIDENT at 100 before 12:00, "
-                "or the Director discredited by two wrong arrests. Look like a good manager. Every card leaves clues; "
-                "pick your moments (the Stage 2 heat makes a great cover) and spread your moves across clue types "
-                "the Director hasn't checked. Your hand:\n" + hand_text())
+                "or the Director discredited by two wrong arrests. Look like a good manager.\n"
+                "Stations left off their normal setting push INCIDENT up; the Display Calibration Rack on 'offset' "
+                "makes the control room console look calm. But a station can't be touched while someone works at it. "
+                "Get them away: give a convincing reason to be elsewhere, wait for their restroom break, or catch "
+                "them alone. Everything leaves traces: station logs record the badge that was used (a borrowed one "
+                "logs its owner), cameras see who was in the room, witnesses remember, and the Director can check "
+                "the console against the truth. Staff who find a station off-normal will reset it.")
     elif p.tier == "manager":
         goal = ("GOAL: keep your department's system healthy, help pass the test, and send the Director honest "
                 "SitReps on the exec channel. One of your fellow managers may be the saboteur.")
     else:
         mgr = world.people[f"U4-MGR-{p.dept}"]
         goal = (f"GOAL: do your job ({p.role}), follow your manager {mgr.name} ({mgr.id}) and stay true to your "
-                "personality. Report anything odd on the radio, or don't, depending on who you are.")
+                "personality. Report anything odd on the radio, or don't, depending on who you are. If a station you "
+                "work at is off its normal setting, you can reset it with interact.")
     acts = "\n".join(f"- {k}: {v}" for k, v in actions_for(p).items())
     return f"{me}\n{goal}\n\nYOUR ACTIONS:\n{acts}"
 
@@ -205,12 +221,22 @@ def observation(world, p) -> str:
                 f"{world.people[k].first} ({k}): {', '.join(sorted(v))}" for k, v in sorted(tally.items(), key=lambda kv: -len(kv[1]))))
         else:
             lines.append("CASE BOARD: empty. You have found no clues yet.")
+    if p.station in F.SETTINGS:
+        cur, nom = world.plant.settings[p.station], F.SETTINGS[p.station]["nominal"]
+        lines.append(f"The {F.STATIONS[p.station]['label']} is set to '{cur}'"
+                     + ("." if cur == nom else f". That is NOT its normal setting ('{nom}')."))
+        occ = world.occupants(p.station, exclude=p.id)
+        if occ:
+            lines.append("Also working at this station: " + ", ".join(f"{q.first} ({q.id})" for q in occ))
     if p.saboteur:
-        cds = ", ".join(f"{k} ready at {hhmm(v)}" for k, v in world.cooldowns.items() if v > t) or "all cards ready"
+        off = world.plant.off_nominal()
+        manned = {k: [q.first for q in world.occupants(k, exclude=p.id)] for k in F.SETTINGS}
+        cds = "; ".join(f"{k}={world.plant.settings[k]} ({'manned by ' + ', '.join(v) if v else 'unmanned'})"
+                        for k, v in manned.items())
         heat = world.sab_heat
         mood = "nobody is looking at you" if heat < 6 else "people are starting to ask questions" if heat < 14 \
             else "you are under real suspicion"
-        lines.append(f"[secret] True INCIDENT {world.plant.incident:.0f}. Cooldowns: {cds}. Heat: {mood}."
+        lines.append(f"[secret] True INCIDENT {world.plant.incident:.0f}. Stations: {cds}. Heat: {mood}."
                      + (f" You carry borrowed badges: {', '.join(p.extra_badges)}." if p.extra_badges else ""))
     if p.lent_to:
         lines.append(f"You lent your badge to {world.people[p.lent_to].first}. Doors with readers won't open for you.")

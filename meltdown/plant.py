@@ -1,13 +1,18 @@
 """Abstract, game-tuned plant model. Not a physics simulation.
 
 Everything is a 0-100 meter. Four systems wear down and are kept up by staff working at stations.
-The saboteur's cards (cards.py) knock systems down and push the INCIDENT meter up; at 100 the game ends.
-The control room only ever sees the *shown* values, which can be masked by a card.
+Fictional station settings (facility.SETTINGS) change how the meters move; off-nominal settings push the
+INCIDENT meter up, and at 100 the game ends. The control room only sees the *shown* values, which the
+Display Calibration Rack can skew.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .config import at
+from .facility import SETTINGS
+
+MASK = {"heat": -15, "stability": 15, "incident": -20}   # console skew while display_calibration = offset
+BUS = {"nominal": 1.0, "reduced": 0.6, "standby": 0.25}
 
 SYSTEMS = ("core", "coolant", "instruments", "security")
 WEAR_PER_MIN = {"core": 0.25, "coolant": 0.35, "instruments": 0.2, "security": 0.15}
@@ -41,9 +46,7 @@ class Plant:
     stability: float = 90.0
     incident: float = 0.0
     health: dict = field(default_factory=lambda: {s: 90.0 for s in SYSTEMS})
-    # masking: until time T, the console subtracts these from what it shows
-    mask_until: float = -1
-    mask: dict = field(default_factory=dict)
+    settings: dict = field(default_factory=lambda: {k: v["nominal"] for k, v in SETTINGS.items()})
     scrammed: bool = False
     status: str = "RUNNING"       # RUNNING | INCIDENT | SCRAM
     stage_minutes: dict = field(default_factory=lambda: {1: 0.0, 2: 0.0, 3: 0.0})
@@ -65,15 +68,21 @@ class Plant:
         gain = 0.08 + 0.12 * h["core"] / 100
         self.output += (self.target - self.output) * min(1.0, gain * m * 6)
         # heat: produced by output and the stage's extra load, removed by coolant
-        heat_target = 30 + self.output * 0.5 + load * 0.9 - 35 * h["coolant"] / 100
+        se = self.settings
+        bus = (BUS[se["coolant_bus_a"]] + BUS[se["coolant_bus_b"]]) / 2
+        load += 22 if se["primary_thermal_loop"] == "boost" else 0
+        load += 12 if se["ventilation_shunt"] == "closed" else 0
+        heat_target = 30 + self.output * 0.5 + load * 0.9 - 35 * h["coolant"] / 100 * bus
         self.heat += (heat_target - self.heat) * min(1.0, m / 6)
         self.heat = max(10.0, min(100.0, self.heat))
         # stability falls with heat and weak core/instruments
         st_target = 100 - max(0, self.heat - 55) * 1.2 - (100 - h["core"]) * 0.35 - (100 - h["instruments"]) * 0.2
+        st_target -= {"auto": 0, "manual": 25, "off": 55}[se["stabilizer_override"]]
         self.stability += (st_target - self.stability) * min(1.0, 0.15 * m * 6)
         self.stability = max(0.0, min(100.0, self.stability))
         # incident meter: driven by danger zones, slowly calms when the plant is healthy
-        danger = max(0, self.heat - 80) * 0.5 + max(0, 40 - self.stability) * 0.4
+        off = sum(1 for k, v in se.items() if v != SETTINGS[k]["nominal"] and k != "display_calibration")
+        danger = max(0, self.heat - 75) * 0.6 + max(0, 45 - self.stability) * 0.5 + 0.6 * off
         calm = 0.1 if (self.heat < 65 and self.stability > 70) else 0.0
         self.incident = max(0.0, self.incident + (danger - calm) * m)
         if self.incident >= INCIDENT_LIMIT:
@@ -86,13 +95,20 @@ class Plant:
         d = dict(output=self.output, heat=self.heat, stability=self.stability, incident=self.incident,
                  **{f"h_{k}": v for k, v in self.health.items()})
         noise = max(0, 50 - self.health["instruments"]) * 0.2      # bad instruments = vague readings
-        if t < self.mask_until:
-            for k, v in self.mask.items():
+        if self.masked:
+            for k, v in MASK.items():
                 d[k] = d[k] + v
         for k in ("heat", "stability", "incident"):
             d[k] = max(0.0, min(100.0, d[k]))
         d["uncertainty"] = round(noise, 1)
         return {k: round(v, 1) if isinstance(v, float) else v for k, v in d.items()}
+
+    @property
+    def masked(self):
+        return self.settings["display_calibration"] == "offset"
+
+    def off_nominal(self):
+        return {k: v for k, v in self.settings.items() if v != SETTINGS[k]["nominal"]}
 
     def true(self) -> dict:
         return {k: round(v, 1) for k, v in dict(output=self.output, heat=self.heat, stability=self.stability,
