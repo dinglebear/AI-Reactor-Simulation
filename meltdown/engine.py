@@ -26,7 +26,7 @@ CORPORATE = [
                   "Your call on the rumor, but get it right. Two wrong names and you're done."),
     (at("11:50"), "Ten minutes, Simone. Tell me we're clean."),
 ]
-HANDLER_BRIEF = ("Handler here. Today is the day. Push their INCIDENT meter to 100 before noon, or make the Director "
+HANDLER_BRIEF = ("Handler here. Years of cover come down to today. Unit 4 can't pass this test. Push their INCIDENT meter to 100 before noon, or make the Director "
                  "arrest the wrong people. Don't get caught. Message me if you need me.")
 
 
@@ -109,6 +109,9 @@ class Engine:
                  f" | run dir {self.log.dir}")
         self.log.event(0, "start", f"Certification day at Unit 4. {len(w.people)} people on shift.", beat=2,
                        saboteur=w.saboteur_id)
+        self.log.event(0, "spy", f"{sab.name}, {sab.role}, is not who everyone thinks. A rival company placed "
+                       f"{sab.first} at Unit 4 years ago, and {sab.first} climbed to manager on merit. Today the "
+                       "cover gets used.", actor=w.saboteur_id, public=False, beat=2)
         self.log.event(0, "handler", HANDLER_BRIEF, actor=w.saboteur_id, public=False, beat=1)
         w.deliver(sab.id, "Handler", HANDLER_BRIEF, "secret")
         next_frame = 0.0

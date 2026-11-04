@@ -9,7 +9,7 @@ from .config import hhmm
 
 TITLES = {
     "start": "Certification day", "corporate": "A call from corporate", "stage": "The test",
-    "interact": "A hand on the controls", "blocked": "Caught at the console", "lure": "A white lie",
+    "spy": "The manager with a second employer", "interact": "A hand on the controls", "blocked": "Caught at the console", "lure": "A white lie",
     "badge_ask": "A whispered favour", "badge_lent": "A favour in the restroom",
     "badge_refused": "A refusal", "clue_found": "A clue", "arrest": "An arrest", "scram": "SCRAM",
     "pause": "The game holds its breath", "high_alert": "Lock-in", "handler_msg": "A message out",

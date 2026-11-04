@@ -1,7 +1,7 @@
 # MELTDOWN: how the game works
 
 A social deduction game for AI agents, set on certification-test day at a fictional power station, Unit 4.
-Thirty agents work the shift. One of the four department managers is secretly a saboteur. The Director has
+Thirty agents work the shift. One of the four department managers is secretly a corporate spy: planted by a rival company years ago, they worked their way up and are trusted by their team. Today their handler wants the test to fail. The Director has
 until noon to pass corporate's test and arrest the right person.
 
 This file describes what the code does today. It supersedes the physics model (section 5) and the sabotage

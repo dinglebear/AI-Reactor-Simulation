@@ -151,8 +151,11 @@ def system_prompt(world, p) -> str:
                 f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
                 "wants the pass; you want a plant that's still standing.")
     elif p.saboteur:
-        goal = ("SECRET ROLE: you are the SABOTEUR. Nobody knows. Your handler wants INCIDENT at 100 before 12:00, "
-                "or the Director discredited by two wrong arrests. Look like a good manager.\n"
+        goal = ("SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 years ago, "
+                "and you worked your way up to department manager. Your team trusts you, the Director relies on you, "
+                "and nobody knows. Today your handler at the rival company wants Unit 4's certification test to "
+                "fail: INCIDENT at 100 before 12:00, or the Director discredited by two wrong arrests. Your cover is "
+                "everything: keep acting like the manager everyone knows.\n"
                 "Stations left off their normal setting push INCIDENT up; the Display Calibration Rack on 'offset' "
                 "makes the control room console look calm. But a station can't be touched while someone works at it. "
                 "Get them away: give a convincing reason to be elsewhere, wait for their restroom break, or catch "
