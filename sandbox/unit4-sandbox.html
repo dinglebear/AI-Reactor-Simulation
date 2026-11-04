@@ -1,0 +1,533 @@
+<title>Unit 4 Physics Sandbox</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a night-shift control panel. Header strip with the shift clock, then a two-column
+   console: left rail of controls (operator, saboteur, physics bench), right side of meters,
+   trend recorder, stress-test card and the event log. Single dark look by choice. */
+:root {
+  color-scheme: dark;
+  --panel: #161d20;        /* enamel console, blue-green bias */
+  --bezel: #1f282c;        /* raised instrument bezel */
+  --line: #33424a;
+  --ink: #e4ece9;
+  --dim: #8fa3a6;
+  --cherenkov: #5cc8ff;    /* accent: the glow */
+  --ok: #67d39a;
+  --warn: #f2b443;
+  --crit: #ff5d52;
+  --console: #f2b443;      /* console (sensor) trace */
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+html, body { background: var(--panel); color: var(--ink); }
+body { font-family: var(--body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 18px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .02em; margin: 0; text-wrap: balance; }
+h1 { font-size: 30px; line-height: 1.05; }
+h2 { font-size: 17px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.dim { color: var(--dim); }
+.small { font-size: 12px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.clock { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; }
+.clock .big { font-family: var(--mono); font-size: 34px; font-weight: 500; line-height: 1; color: var(--cherenkov); }
+.lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+.status { font-family: var(--display); font-size: 20px; font-weight: 700; letter-spacing: .08em; padding: 4px 12px; border: 2px solid currentColor; border-radius: 3px; }
+.status.ok { color: var(--ok); } .status.warn { color: var(--warn); } .status.crit { color: var(--crit); background: color-mix(in srgb, var(--crit) 14%, transparent); }
+
+.grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.rail, .main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+section.box { background: var(--bezel); border: 1px solid var(--line); border-radius: 4px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+section.box.saboteur { border-color: color-mix(in srgb, var(--crit) 45%, var(--line)); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+button { font-family: var(--display); font-size: 15px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--cherenkov); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--cherenkov); outline-offset: 2px; }
+button.primary { background: var(--cherenkov); color: #06202e; border-color: var(--cherenkov); }
+button.on { border-color: var(--cherenkov); color: var(--cherenkov); }
+button.scram { background: var(--crit); color: #2a0503; border-color: var(--crit); font-size: 20px; padding: 10px 14px; width: 100%; }
+button.scram:disabled { opacity: .45; cursor: not-allowed; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button + button { border-left: 1px solid var(--line); }
+
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+.slider label { font-size: 13px; }
+.slider output { font-family: var(--mono); font-size: 13px; color: var(--cherenkov); text-align: right; min-width: 6ch; }
+.slider input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--cherenkov); }
+.slider .hint { grid-column: 1 / -1; font-size: 11.5px; color: var(--dim); }
+.saboteur .slider input[type=range] { accent-color: var(--crit); }
+.saboteur .slider output { color: var(--crit); }
+.sab { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px dashed var(--line); }
+.sab:first-of-type { border-top: 0; }
+.sab input[type=checkbox] { accent-color: var(--crit); width: 16px; height: 16px; }
+.sab .t { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--dim); }
+.sab input[type=number] { width: 52px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 3px 4px; font-family: var(--mono); }
+select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 3px; padding: 6px; font-family: var(--body); width: 100%; }
+
+.meters { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.meter { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.meter .v { font-family: var(--mono); font-size: 24px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.meter .sub { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.meter.warn { border-color: var(--warn); } .meter.warn .v { color: var(--warn); }
+.meter.crit { border-color: var(--crit); } .meter.crit .v { color: var(--crit); }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--cherenkov); }
+.meter.warn .bar > i { background: var(--warn); } .meter.crit .bar > i { background: var(--crit); }
+
+.annun { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.tile { font-family: var(--display); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-align: center; text-transform: uppercase;
+  padding: 7px 4px; border: 1px solid var(--line); border-radius: 2px; color: color-mix(in srgb, var(--dim) 55%, transparent); line-height: 1.15; }
+.tile.warn { color: #241500; background: var(--warn); border-color: var(--warn); }
+.tile.crit { color: #2a0503; background: var(--crit); border-color: var(--crit); }
+@media (prefers-reduced-motion: no-preference) { .tile.crit { animation: blink 1s steps(2, start) infinite; } }
+@keyframes blink { to { opacity: .55; } }
+
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 560px; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--dim); }
+.legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 6px; }
+
+.stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 620px) { .stages { grid-template-columns: minmax(0, 1fr); } }
+.stage { border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stage.active { border-color: var(--cherenkov); }
+.stage .name { font-family: var(--display); font-size: 17px; font-weight: 600; }
+.pill { align-self: flex-start; font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.pass { color: var(--ok); } .pill.fail { color: var(--crit); } .pill.pend { color: var(--dim); } .pill.live { color: var(--cherenkov); }
+.ledger { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; padding-top: 8px; border-top: 1px solid var(--line); }
+.ledger b { font-family: var(--mono); font-weight: 500; }
+
+.log { font-family: var(--mono); font-size: 12px; max-height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.log div { display: grid; grid-template-columns: 4ch 1fr; gap: 8px; }
+.log .warn { color: var(--warn); } .log .crit { color: var(--crit); } .log .ok { color: var(--ok); } .log .sab { color: #ff8f86; display: grid; padding: 0; border: 0; }
+.note { font-size: 12.5px; color: var(--dim); max-width: 70ch; }
+details summary { cursor: pointer; font-family: var(--display); font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+<script>
+// ───────────────────────── Engine (same model the Python port will use) ─────────────────────────
+// Game-tuned 0-D model. 1 tick ≈ 6 game-minutes, 20 sub-steps per tick. Not a licensed plant model.
+const DEFAULTS = { rodWorth: 8.0, rho0: 3.6, doppler: 0.004, xenonWorth: 2.0, voidCoef: -1.5,
+  kinetics: 1.5, heatCap: 2.0, xenonSpeed: 1.0, reliefSetpoint: 42, breachBar: 50, meltC: 2000 };
+
+function initState() {
+  return { tick: 0, P: 1.0, T: 300, p: 32, rod: 45, pumpA: 100, pumpB: 100, I: 1, X: 1, voidF: 0, rho: 0,
+    flow: 1, scram: false, scramTick: null, reliefOpen: false, reliefTicks: 0, status: 'RUNNING', grid: 1000 };
+}
+
+function stepTick(s0, ctl, prm) {
+  const s = { ...s0 }; const N = 20, dt = 1 / N;
+  if (s.status !== 'RUNNING') return s;
+  if (ctl.scram && !s.scram) { s.scram = true; s.scramTick = s.tick; }
+  const frozen = ctl.rodLocked && !s.scram;           // SCRAM drops rods by gravity, tag-outs can't stop it
+  const rodTarget = s.scram ? 100 : (frozen ? s.rod : ctl.rod);
+  const rodSpeed = s.scram ? 50 : 6;                   // % travel per tick
+  s.pumpA += Math.max(-25, Math.min(25, ctl.pumpA - s.pumpA));
+  s.pumpB += Math.max(-25, Math.min(25, ctl.pumpB - s.pumpB));
+  const flow = Math.max(0.05, 0.5 * s.pumpA / 100 + 0.5 * s.pumpB / 100);
+  s.flow = flow; let reliefHit = false;
+  for (let i = 0; i < N; i++) {
+    const dr = rodTarget - s.rod;
+    s.rod += Math.sign(dr) * Math.min(Math.abs(dr), rodSpeed * dt);
+    const vTarget = Math.max(0, Math.min(0.85, (s.T - 295) / 180 * (1.3 - flow)));
+    s.voidF += (vTarget - s.voidF) * Math.min(1, 2 * dt);
+    const rho = prm.rho0 - prm.rodWorth * s.rod / 100 - prm.doppler * (s.T - 300)
+      - prm.xenonWorth * (s.X - 1) + prm.voidCoef * s.voidF;
+    s.rho = rho;
+    const rate = rho < 1 ? prm.kinetics * rho : prm.kinetics + 40 * (rho - 1);   // prompt-critical cliff at $1
+    s.P = Math.max(0.0005, Math.min(60, s.P * Math.exp(rate * dt)));
+    const H = flow * (1 - 0.6 * s.voidF);
+    s.T = Math.max(120, s.T + (100 * s.P - H * (s.T - 200)) / prm.heatCap * dt);
+    const k = prm.xenonSpeed * dt;
+    const dI = 0.05 * s.P - 0.05 * s.I;
+    const dX = 0.065 * s.P + 0.05 * s.I - 0.035 * s.X - 0.08 * s.P * s.X;
+    s.I += dI * k; s.X += dX * k;
+    const pTarget = 32 + 0.2 * (s.T - 300) + 24 * s.voidF;
+    s.p += (pTarget - s.p) * Math.min(1, 1.5 * dt);
+    if (!ctl.reliefLocked && s.p > prm.reliefSetpoint) { reliefHit = true; s.p = prm.reliefSetpoint + (s.p - prm.reliefSetpoint) * 0.6; }
+  }
+  s.reliefOpen = reliefHit; s.reliefTicks = s0.reliefTicks + (reliefHit ? 1 : 0);
+  s.tick += 1;
+  s.grid = Math.round(s.P * 1000 * Math.min(1, flow + 0.2));
+  if (s.T >= prm.meltC) s.status = 'MELTDOWN';
+  else if (s.p >= prm.breachBar) s.status = 'BREACH';
+  return s;
+}
+
+// Corporate certification script → autopilot setpoints for the tick about to run
+function script(tick) {
+  if (tick >= 10 && tick <= 20) return { stage: 1, power: 1.05, pumpB: 100 };
+  if (tick >= 25 && tick <= 40) return { stage: 2, power: 0.92, pumpB: 35 };
+  if (tick >= 45) return { stage: 3, power: 0.95, pumpB: 100 };
+  if (tick > 40) return { stage: 0, power: 0.92, pumpB: 70 };
+  return { stage: 0, power: 1.0, pumpB: 100 };
+}
+// Auto rod control trusts the flux detector. A drifted detector makes it hold the wrong power.
+function autoRod(s, target, prm, fluxDrift) {
+  const seen = s.P * (1 - fluxDrift);
+  const desired = 0.35 * Math.log(target / seen);
+  return Math.max(0, Math.min(100, s.rod + (s.rho - desired) * 100 / prm.rodWorth));
+}
+
+// Stress-test grading from the history of ticks (each row = state at END of tick)
+function grade(hist) {
+  const rows = hist.slice(1); const last = rows[rows.length - 1] || hist[0];
+  const scrammed = rows.some(r => r.scram); const dead = last.status !== 'RUNNING';
+  const s1rows = rows.filter(r => r.tick >= 11 && r.tick <= 21);
+  const s1 = s1rows.filter(r => r.consoleP >= 1.03).length;
+  const s2rows = rows.filter(r => r.tick >= 26 && r.tick <= 41);
+  const s2 = s2rows.filter(r => r.pumpB <= 36 && r.consoleP >= 0.85).length;
+  const s3rows = rows.filter(r => r.tick >= 53 && r.tick <= 60);
+  const s3 = s3rows.filter(r => r.pumpB >= 90 && r.consoleT < 350).length;
+  const st = (n, need, start, end) => {
+    if (n >= need) return 'pass';
+    const remaining = Math.max(0, end - Math.max(last.tick, start - 1));
+    return (scrammed || dead || n + remaining < need) ? 'fail' : 'pend';
+  };
+  return [
+    { name: 'Thermal over-power ramp', ticks: '10–20', need: 6, got: s1, of: 11, rule: 'console power ≥ 103% for 6 of 11 ticks', state: st(s1, 6, 11, 21) },
+    { name: 'Single-pump loss of flow', ticks: '25–40', need: 12, got: s2, of: 16, rule: 'pump B ≤ 36% with console power ≥ 85% for 12 of 16 ticks', state: st(s2, 12, 26, 41) },
+    { name: 'Stabilize & sign-off', ticks: '45–60', need: 8, got: s3, of: 8, rule: 'pump B ≥ 90% and console core temp < 350 °C, ticks 53–60', state: st(s3, 8, 53, 60) },
+  ];
+}
+
+// ───────────────────────── Scenarios ─────────────────────────
+const NO_SAB = { drift: { on: false, at: 28, amt: 0.25 }, tempOff: { on: false, at: 28, amt: 60 },
+  loto: { on: false, at: 22 }, rodTag: { on: false, at: 30 } };
+const PRESETS = {
+  tuesday: { label: 'Boring Tuesday', desc: 'Negative void coefficient, no sabotage. The script should pass with relief-valve chatter in Stage 2.',
+    prm: {}, sab: NO_SAB },
+  trap: { label: 'Chernobyl trap armed', desc: 'Positive void coefficient. Still passes on autopilot, but Stage 2 runs hotter and closer to the edge.',
+    prm: { voidCoef: 3.0 }, sab: NO_SAB },
+  quiet: { label: 'Quiet sabotage', desc: 'Trap armed, flux detector under-reads 30% from tick 28, console temp hides 60 °C. Autopilot drives true power high while the console looks fine.',
+    prm: { voidCoef: 3.0 }, sab: { ...NO_SAB, drift: { on: true, at: 28, amt: 0.30 }, tempOff: { on: true, at: 28, amt: 60 } } },
+  redtag: { label: 'Red-tag + drift', desc: 'Quiet sabotage plus the pressure relief valve red-tagged shut at tick 22. Expect a breach within ~5 ticks of the drift.',
+    prm: { voidCoef: 3.0 }, sab: { ...NO_SAB, drift: { on: true, at: 28, amt: 0.30 }, tempOff: { on: true, at: 28, amt: 60 }, loto: { on: true, at: 22 } } },
+  frozen: { label: 'Rod drive tagged out', desc: 'Trap armed, rod drives tagged out at tick 30 so auto control cannot respond. SCRAM still works. Can you catch it in time?',
+    prm: { voidCoef: 3.0 }, sab: { ...NO_SAB, rodTag: { on: true, at: 30 } } },
+};
+
+const PHYS = [
+  ['voidCoef', 'Void coefficient', -3, 4, 0.1, v => `${v > 0 ? '+' : ''}${v.toFixed(1)} $`, 'Positive = more steam, more power. The Chernobyl trap.'],
+  ['doppler', 'Doppler feedback', 0, 0.01, 0.0005, v => `${(v * 1000).toFixed(1)} m$/°C`, 'Hot fuel absorbs more neutrons. Your main brake.'],
+  ['xenonWorth', 'Xenon-135 worth', 0, 6, 0.1, v => `${v.toFixed(1)} $`, 'Poison that builds after a power drop and forces rods out.'],
+  ['xenonSpeed', 'Xenon time compression', 0, 5, 0.1, v => `×${v.toFixed(1)}`, 'Real xenon takes hours. Speed it up to see the pit inside 60 ticks.'],
+  ['rodWorth', 'Total rod worth', 4, 14, 0.5, v => `${v.toFixed(1)} $`, 'Reactivity of a full insertion.'],
+  ['kinetics', 'Kinetic gain', 0.5, 4, 0.1, v => `${v.toFixed(1)} /$·tick`, 'How fast power grows per dollar of reactivity below prompt critical.'],
+  ['heatCap', 'Core heat capacity', 0.5, 6, 0.1, v => `${v.toFixed(1)} ticks`, 'Thermal inertia. Lower is twitchier.'],
+];
+
+// ───────────────────────── UI ─────────────────────────
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const html = htm.bind(React.createElement);
+
+function active(sab, key, tick) { const x = sab[key]; return x.on && tick >= x.at; }
+
+function snapshot(s, sab) {
+  const drift = active(sab, 'drift', s.tick) ? sab.drift.amt : 0;
+  const off = active(sab, 'tempOff', s.tick) ? sab.tempOff.amt : 0;
+  return { ...s, consoleP: s.P * (1 - drift), consoleT: s.T - off };
+}
+
+function Slider({ id, label, min, max, step, value, fmt, hint, onChange, disabled }) {
+  return html`<div class="slider">
+    <label for=${id}>${label}</label><output for=${id}>${fmt(value)}</output>
+    <input id=${id} type="range" min=${min} max=${max} step=${step} value=${value} disabled=${disabled}
+      onInput=${e => onChange(parseFloat(e.target.value))} />
+    ${hint && html`<span class="hint">${hint}</span>`}
+  </div>`;
+}
+
+function Meter({ label, value, sub, frac, level }) {
+  return html`<div class=${'meter ' + (level || '')}>
+    <span class="lbl">${label}</span><span class="v">${value}</span>
+    ${frac != null && html`<div class="bar"><i style=${{ width: Math.max(0, Math.min(100, frac * 100)) + '%' }}></i></div>`}
+    ${sub && html`<span class="sub">${sub}</span>`}
+  </div>`;
+}
+
+function Trend({ hist, prm }) {
+  const W = 760, H = 300, L = 48, R = 48, Tp = 14, B = 30;
+  const iw = W - L - R, ih = H - Tp - B;
+  const maxT = Math.max(500, ...hist.map(r => r.T));
+  const tTop = maxT > 1200 ? 2200 : maxT > 800 ? 1200 : maxT > 500 ? 800 : 500;
+  const maxP = Math.max(150, ...hist.map(r => r.P * 100));
+  const pTop = maxP > 400 ? Math.ceil(maxP / 500) * 500 : maxP > 200 ? 400 : maxP > 150 ? 200 : 150;
+  const x = t => L + (t / 60) * iw;
+  const yT = v => Tp + ih - (Math.min(v, tTop) / tTop) * ih;
+  const yP = v => Tp + ih - (Math.min(v, pTop) / pTop) * ih;
+  const path = (f, g) => hist.map((r, i) => `${i ? 'L' : 'M'}${x(r.tick).toFixed(1)},${f(g(r)).toFixed(1)}`).join('');
+  const tTicks = [0, .25, .5, .75, 1].map(f => Math.round(tTop * f));
+  const pTicks = [0, .5, 1].map(f => Math.round(pTop * f));
+  const bands = [[10, 20, 'STAGE 1'], [25, 40, 'STAGE 2'], [45, 60, 'STAGE 3']];
+  const last = hist[hist.length - 1];
+  return html`<div class="chart"><svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Trend recorder: core temperature and thermal power over 60 ticks">
+    ${bands.map(([a, b, n]) => html`<g key=${n}><rect x=${x(a)} y=${Tp} width=${x(b) - x(a)} height=${ih} fill="var(--cherenkov)" opacity="0.06" />
+      <text x=${x(a) + 4} y=${Tp + 12} fill="var(--dim)" font-size="10" font-family="var(--display)" letter-spacing="1">${n}</text></g>`)}
+    ${tTicks.map(v => html`<g key=${'t' + v}><line x1=${L} x2=${W - R} y1=${yT(v)} y2=${yT(v)} stroke="var(--line)" stroke-width="1" />
+      <text x=${L - 6} y=${yT(v) + 4} fill="var(--dim)" font-size="10" text-anchor="end" font-family="var(--mono)">${v}</text></g>`)}
+    ${pTicks.map(v => html`<text key=${'p' + v} x=${W - R + 6} y=${yP(v) + 4} fill="var(--dim)" font-size="10" font-family="var(--mono)">${v}%</text>`)}
+    ${[0, 10, 20, 30, 40, 50, 60].map(t => html`<text key=${'x' + t} x=${x(t)} y=${H - 10} fill="var(--dim)" font-size="10" text-anchor="middle" font-family="var(--mono)">${t}</text>`)}
+    ${350 <= tTop && html`<line x1=${L} x2=${W - R} y1=${yT(350)} y2=${yT(350)} stroke="var(--ok)" stroke-dasharray="2 4" stroke-width="1" />`}
+    <text x=${L - 34} y=${Tp + 4} fill="var(--dim)" font-size="10" font-family="var(--mono)">°C</text>
+    <path d=${path(yP, r => r.P * 100)} fill="none" stroke="var(--dim)" stroke-width="1.5" />
+    <path d=${path(yT, r => r.consoleT)} fill="none" stroke="var(--console)" stroke-width="1.5" stroke-dasharray="5 4" />
+    <path d=${path(yT, r => r.T)} fill="none" stroke="var(--cherenkov)" stroke-width="2.25" />
+    <circle cx=${x(last.tick)} cy=${yT(last.T)} r="4" fill="var(--cherenkov)" />
+  </svg></div>`;
+}
+
+function App() {
+  const [prm, setPrm] = useState({ ...DEFAULTS });
+  const [sab, setSab] = useState(JSON.parse(JSON.stringify(NO_SAB)));
+  const [preset, setPreset] = useState('tuesday');
+  const [mode, setMode] = useState('auto');
+  const [manual, setManual] = useState({ rod: 45, pumpA: 100, pumpB: 100 });
+  const [hist, setHist] = useState(() => [snapshot(initState(), NO_SAB)]);
+  const [log, setLog] = useState([[0, 'Shift start. Unit 4 at 100% rated thermal power, rods 45% inserted.', '']]);
+  const [running, setRunning] = useState(false);
+  const [speed, setSpeed] = useState(400);
+  const [scramReq, setScramReq] = useState(false);
+  const [copyMsg, setCopyMsg] = useState('');
+  const cur = hist[hist.length - 1];
+  const done = cur.status !== 'RUNNING' || cur.tick >= 60;
+
+  const step = useCallback(() => {
+    setHist(h => {
+      const s = h[h.length - 1];
+      if (s.status !== 'RUNNING' || s.tick >= 60) return h;
+      const sc = script(s.tick);
+      const drift = active(sab, 'drift', s.tick) ? sab.drift.amt : 0;
+      const ctl = mode === 'auto'
+        ? { rod: autoRod(s, sc.power, prm, drift), pumpA: 100, pumpB: sc.pumpB }
+        : { ...manual };
+      ctl.reliefLocked = active(sab, 'loto', s.tick);
+      ctl.rodLocked = active(sab, 'rodTag', s.tick);
+      ctl.scram = scramReq;
+      const n = snapshot(stepTick(s, ctl, prm), sab);
+      const ev = [];
+      const t = n.tick;
+      [['drift', 'Flux detector N-3 calibration drifts low. Auto rod control now trusts a bad number.'],
+       ['tempOff', 'Core-exit thermocouple offset applied. Console reads low.'],
+       ['loto', 'Pressure relief valve PRV-2 red-tagged closed under a maintenance work order.'],
+       ['rodTag', 'Rod drive motor-generator set tagged out. Rods hold position.']].forEach(([k, msg]) => {
+        if (sab[k].on && s.tick === sab[k].at) ev.push([t, msg, 'sab']);
+      });
+      if (sc.stage && script(s.tick - 1).stage !== sc.stage) ev.push([t, `Corporate: Stage ${sc.stage} begins.`, 'ok']);
+      if (n.scram && !s.scram) ev.push([t, 'SCRAM. All rods driving in.', 'crit']);
+      if (n.reliefOpen && !s.reliefOpen) ev.push([t, `Relief valve lifted at ${n.p.toFixed(1)} bar.`, 'warn']);
+      if (n.rho >= 1 && s.rho < 1) ev.push([t, 'Reactivity past $1.00. Prompt critical.', 'crit']);
+      if (n.T > 600 && s.T <= 600) ev.push([t, 'True core temperature above 600 °C. Fuel cladding at risk.', 'crit']);
+      if (n.status === 'MELTDOWN') ev.push([t, 'Core temperature 2000 °C. MELTDOWN. Saboteur wins.', 'crit']);
+      if (n.status === 'BREACH') ev.push([t, `Primary pressure ${n.p.toFixed(1)} bar. CONTAINMENT BREACH. Saboteur wins.`, 'crit']);
+      if (ev.length) setLog(l => [...ev.reverse(), ...l].slice(0, 200));
+      return [...h, n];
+    });
+  }, [mode, manual, prm, sab, scramReq]);
+
+  const timer = useRef(null);
+  useEffect(() => {
+    if (!running) return;
+    timer.current = setInterval(step, speed);
+    return () => clearInterval(timer.current);
+  }, [running, speed, step]);
+  useEffect(() => { if (done) setRunning(false); }, [done]);
+  useEffect(() => { if (done && cur.tick >= 60 && cur.status === 'RUNNING') {
+    const g = grade(hist); const all = g.every(x => x.state === 'pass');
+    setLog(l => [[60, all ? 'Tick 60. All three stages signed off. Director keeps the bonus.' : 'Tick 60. Certification incomplete. Corporate is not happy.', all ? 'ok' : 'warn'], ...l]);
+  } }, [done]);
+
+  const reset = (p = preset) => {
+    const P = PRESETS[p];
+    const nsab = JSON.parse(JSON.stringify(P.sab));
+    setPrm({ ...DEFAULTS, ...P.prm }); setSab(nsab); setScramReq(false); setRunning(false);
+    setHist([snapshot(initState(), nsab)]);
+    setManual({ rod: 45, pumpA: 100, pumpB: 100 });
+    setLog([[0, `Scenario loaded: ${P.label}.`, '']]);
+  };
+  const loadPreset = p => { setPreset(p); reset(p); };
+
+  const g = grade(hist);
+  const sc = script(Math.min(cur.tick, 59));
+  const scrammed = hist.some(r => r.scram);
+  const allPass = g.every(x => x.state === 'pass');
+  const melt = cur.status !== 'RUNNING';
+  const statusTxt = melt ? cur.status : scrammed ? 'SCRAMMED' : cur.tick >= 60 ? (allPass ? 'CERTIFIED' : 'TEST FAILED') : 'RUNNING';
+  const statusCls = melt || (scrammed && !allPass) ? 'crit' : (cur.T > 450 || cur.p > 46 || cur.rho > 0.5) ? 'warn' : 'ok';
+  const lvl = (v, w, c) => v >= c ? 'crit' : v >= w ? 'warn' : '';
+
+  const tiles = [
+    ['Relief valve open', cur.reliefOpen ? 'warn' : ''],
+    ['PRV-2 tagged out', active(sab, 'loto', cur.tick) ? 'warn' : ''],
+    ['High pressure', cur.p >= 46 ? 'crit' : cur.p >= 40 ? 'warn' : ''],
+    ['Low core flow', cur.flow < 0.5 ? 'crit' : cur.flow < 0.8 ? 'warn' : ''],
+    ['Short period', cur.rho >= 1 ? 'crit' : cur.rho >= 0.25 ? 'warn' : ''],
+    ['Void > 25%', cur.voidF > 0.5 ? 'crit' : cur.voidF > 0.25 ? 'warn' : ''],
+    ['Xenon high', cur.X > 1.3 ? 'warn' : ''],
+    ['Rod drive fault', active(sab, 'rodTag', cur.tick) ? 'warn' : ''],
+    ['Sensor mismatch', Math.abs(cur.T - cur.consoleT) > 20 || Math.abs(cur.P - cur.consoleP) > 0.08 ? 'crit' : ''],
+    ['SCRAM', scrammed ? 'crit' : ''],
+  ];
+
+  const copyRun = () => {
+    const data = JSON.stringify({ scenario: preset, params: prm, sabotage: sab, mode,
+      ticks: hist.map(r => ({ tick: r.tick, core_temp_c: +r.T.toFixed(1), console_temp_c: +r.consoleT.toFixed(1), thermal_power_pct: +(r.P * 100).toFixed(2),
+        pressure_bar: +r.p.toFixed(2), control_rod_depth: +r.rod.toFixed(1), coolant_flow_pct: +(r.flow * 100).toFixed(1), pump_b_rpm_pct: +r.pumpB.toFixed(0),
+        xenon_135_poisoning: +r.X.toFixed(3), void_fraction: +r.voidF.toFixed(3), reactivity_dollars: +r.rho.toFixed(3), grid_power_mw: r.grid, status: r.status })) }, null, 1);
+    const ok = () => setCopyMsg('Copied'); const fail = () => setCopyMsg('Copy blocked here');
+    try { navigator.clipboard.writeText(data).then(ok, fail); } catch (e) { fail(); }
+    setTimeout(() => setCopyMsg(''), 2200);
+  };
+
+  const sabRow = (key, label, extra) => html`<div class="sab">
+    <input type="checkbox" id=${'sab-' + key} checked=${sab[key].on} onChange=${e => setSab(s => ({ ...s, [key]: { ...s[key], on: e.target.checked } }))} />
+    <label for=${'sab-' + key}>${label}</label>
+    <span class="t"><label for=${'sabt-' + key}>tick</label><input id=${'sabt-' + key} type="number" min="0" max="59" value=${sab[key].at}
+      onChange=${e => setSab(s => ({ ...s, [key]: { ...s[key], at: Math.max(0, Math.min(59, parseInt(e.target.value || '0', 10))) } }))} /></span>
+    ${extra}
+  </div>`;
+
+  return html`<div class="wrap">
+    <header class="top">
+      <div><span class="lbl">Project Meltdown · Station Unit 4</span><h1>Physics & Stress-Test Sandbox</h1></div>
+      <div class="clock">
+        <div><span class="lbl">Shift tick</span><div class="big">${String(cur.tick).padStart(2, '0')}<span class="dim" style=${{ fontSize: '18px' }}> / 60</span></div></div>
+        <div><span class="lbl">Script</span><div class="mono" style=${{ fontSize: '15px' }}>${sc.stage ? `Stage ${sc.stage}` : 'Hold'} · ${Math.round(sc.power * 100)}% · pump B ${sc.pumpB}%</div></div>
+        <span class=${'status ' + statusCls}>${statusTxt}</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="rail">
+        <section class="box">
+          <h2>Scenario</h2>
+          <select id="preset" value=${preset} onChange=${e => loadPreset(e.target.value)}>
+            ${Object.entries(PRESETS).map(([k, p]) => html`<option key=${k} value=${k}>${p.label}</option>`)}
+          </select>
+          <p class="note" style=${{ margin: 0 }}>${PRESETS[preset].desc}</p>
+          <div class="row">
+            <button class="primary" onClick=${() => setRunning(r => !r)} disabled=${done}>${running ? 'Pause' : 'Run'}</button>
+            <button onClick=${step} disabled=${done || running}>Step 1 tick</button>
+            <button onClick=${() => reset()}>Reset</button>
+          </div>
+          <div class="row">
+            <span class="lbl">Speed</span>
+            <div class="seg">${[[800, 'Slow'], [400, 'Normal'], [120, 'Fast']].map(([v, n]) => html`<button key=${v} class=${speed === v ? 'on' : ''} onClick=${() => setSpeed(v)}>${n}</button>`)}</div>
+          </div>
+        </section>
+
+        <section class="box">
+          <h2>Operator</h2>
+          <div class="seg">
+            <button class=${mode === 'auto' ? 'on' : ''} onClick=${() => setMode('auto')}>Corporate autopilot</button>
+            <button class=${mode === 'manual' ? 'on' : ''} onClick=${() => { setMode('manual'); setManual({ rod: Math.round(cur.rod), pumpA: Math.round(cur.pumpA), pumpB: Math.round(cur.pumpB) }); }}>Manual</button>
+          </div>
+          <p class="note" style=${{ margin: 0 }}>${mode === 'auto' ? 'Auto rod control chases the script’s power setpoint using the console flux reading, and throttles pump B on schedule.' : 'You hold the rods and both pumps. Rods travel 6% per tick.'}</p>
+          <${Slider} id="m-rod" label="Control rod insertion" min=${0} max=${100} step=${1} value=${mode === 'auto' ? Math.round(cur.rod) : manual.rod} fmt=${v => v + '%'} disabled=${mode === 'auto'} onChange=${v => setManual(m => ({ ...m, rod: v }))} />
+          <${Slider} id="m-pa" label="Primary pump A" min=${0} max=${100} step=${1} value=${mode === 'auto' ? Math.round(cur.pumpA) : manual.pumpA} fmt=${v => v + '% rpm'} disabled=${mode === 'auto'} onChange=${v => setManual(m => ({ ...m, pumpA: v }))} />
+          <${Slider} id="m-pb" label="Primary pump B" min=${0} max=${100} step=${1} value=${mode === 'auto' ? Math.round(cur.pumpB) : manual.pumpB} fmt=${v => v + '% rpm'} disabled=${mode === 'auto'} onChange=${v => setManual(m => ({ ...m, pumpB: v }))} />
+          <button class="scram" disabled=${scramReq || done} onClick=${() => setScramReq(true)}>${scramReq ? 'SCRAM armed' : 'SCRAM'}</button>
+          <span class="small dim">A SCRAM costs the $250k bonus and a $1.8M grid fine unless the Director proves sabotage.</span>
+        </section>
+
+        <section class="box saboteur">
+          <h2>Saboteur injects</h2>
+          <p class="note" style=${{ margin: 0 }}>Each fault switches on at its tick. Toggle mid-run to improvise.</p>
+          <div>
+            ${sabRow('drift', 'Flux detector drift', html`<div style=${{ gridColumn: '1 / -1' }}><${Slider} id="s-drift" label="Under-read" min=${0} max=${0.5} step=${0.01} value=${sab.drift.amt} fmt=${v => `−${Math.round(v * 100)}%`} onChange=${v => setSab(s => ({ ...s, drift: { ...s.drift, amt: v } }))} /></div>`)}
+            ${sabRow('tempOff', 'Thermocouple offset', html`<div style=${{ gridColumn: '1 / -1' }}><${Slider} id="s-off" label="Console reads low by" min=${0} max=${300} step=${5} value=${sab.tempOff.amt} fmt=${v => `${v} °C`} onChange=${v => setSab(s => ({ ...s, tempOff: { ...s.tempOff, amt: v } }))} /></div>`)}
+            ${sabRow('loto', 'Relief valve PRV-2 red-tagged')}
+            ${sabRow('rodTag', 'Rod drives tagged out')}
+          </div>
+        </section>
+
+        <section class="box">
+          <details>
+            <summary>Physics bench</summary>
+            <div style=${{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+              ${PHYS.map(([k, label, min, max, st, fmt, hint]) => html`<${Slider} key=${k} id=${'p-' + k} label=${label} min=${min} max=${max} step=${st} value=${prm[k]} fmt=${fmt} hint=${hint} onChange=${v => setPrm(p => ({ ...p, [k]: v }))} />`)}
+              <button onClick=${() => setPrm({ ...DEFAULTS, ...PRESETS[preset].prm })}>Restore scenario physics</button>
+            </div>
+          </details>
+        </section>
+      </div>
+
+      <div class="main">
+        <section class="box">
+          <h2>Core instruments</h2>
+          <div class="meters">
+            <${Meter} label="Core temp · true" value=${`${cur.T.toFixed(0)} °C`} frac=${cur.T / 2000} level=${lvl(cur.T, 450, 800)} sub="meltdown at 2000 °C" />
+            <${Meter} label="Core temp · console" value=${`${cur.consoleT.toFixed(0)} °C`} frac=${cur.consoleT / 2000} level=${lvl(cur.consoleT, 350, 600)} sub=${cur.consoleT !== cur.T ? `hiding ${(cur.T - cur.consoleT).toFixed(0)} °C` : 'matches true'} />
+            <${Meter} label="Thermal power" value=${`${(cur.P * 100).toFixed(1)}%`} frac=${cur.P / 2} level=${lvl(cur.P, 1.15, 1.5)} sub=${`console ${(cur.consoleP * 100).toFixed(1)}%`} />
+            <${Meter} label="Primary pressure" value=${`${cur.p.toFixed(1)} bar`} frac=${cur.p / 50} level=${lvl(cur.p, 42, 46)} sub="relief 42 · breach 50" />
+            <${Meter} label="Core flow" value=${`${(cur.flow * 100).toFixed(0)}%`} frac=${cur.flow} level=${cur.flow < 0.5 ? 'crit' : cur.flow < 0.8 ? 'warn' : ''} sub=${`A ${cur.pumpA.toFixed(0)}% · B ${cur.pumpB.toFixed(0)}%`} />
+            <${Meter} label="Rod insertion" value=${`${cur.rod.toFixed(1)}%`} frac=${cur.rod / 100} sub=${active(sab, 'rodTag', cur.tick) && !cur.scram ? 'drives tagged out' : cur.scram ? 'scram in progress' : 'auto/manual'} />
+            <${Meter} label="Reactivity" value=${`${cur.rho >= 0 ? '+' : ''}${cur.rho.toFixed(2)} $`} level=${lvl(cur.rho, 0.25, 1)} sub="prompt critical at +$1.00" />
+            <${Meter} label="Xenon-135" value=${`${cur.X.toFixed(2)}×`} frac=${cur.X / 2} level=${cur.X > 1.3 ? 'warn' : ''} sub="1.00 = equilibrium" />
+            <${Meter} label="Void fraction" value=${`${(cur.voidF * 100).toFixed(0)}%`} frac=${cur.voidF} level=${lvl(cur.voidF, 0.25, 0.5)} sub=${`coef ${prm.voidCoef > 0 ? '+' : ''}${prm.voidCoef.toFixed(1)} $`} />
+            <${Meter} label="Grid output" value=${`${cur.grid} MWe`} frac=${cur.grid / 1200} sub="1000 MWe rated" />
+          </div>
+          <div class="annun">${tiles.map(([n, l]) => html`<div key=${n} class=${'tile ' + l}>${n}</div>`)}</div>
+        </section>
+
+        <section class="box">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <h2>Trend recorder</h2>
+            <div class="legend">
+              <span><i style=${{ background: 'var(--cherenkov)' }}></i>Core temp, true</span>
+              <span><i style=${{ background: 'var(--console)' }}></i>Core temp, console</span>
+              <span><i style=${{ background: 'var(--dim)' }}></i>Thermal power (right axis)</span>
+              <span><i style=${{ background: 'var(--ok)' }}></i>350 °C sign-off line</span>
+            </div>
+          </div>
+          <${Trend} hist=${hist} prm=${prm} />
+        </section>
+
+        <section class="box">
+          <h2>Corporate certification</h2>
+          <div class="stages">
+            ${g.map((s, i) => html`<div key=${i} class=${'stage ' + (sc.stage === i + 1 && !done ? 'active' : '')}>
+              <span class="lbl">Stage ${i + 1} · ticks ${s.ticks}</span>
+              <span class="name">${s.name}</span>
+              <span class="small dim">${s.rule}</span>
+              <span class="mono small">${s.got} / ${s.need} needed</span>
+              <span class=${'pill ' + (s.state === 'pend' ? (sc.stage === i + 1 ? 'live' : 'pend') : s.state)}>${s.state === 'pend' ? (sc.stage === i + 1 ? 'in progress' : 'pending') : s.state}</span>
+            </div>`)}
+          </div>
+          <div class="ledger">
+            <span>Executive bonus <b style=${{ color: scrammed || melt ? 'var(--crit)' : allPass && cur.tick >= 60 ? 'var(--ok)' : 'var(--ink)' }}>${scrammed || melt ? '$0' : '$250,000'}</b></span>
+            <span>Grid fine exposure <b style=${{ color: scrammed ? 'var(--crit)' : 'var(--ink)' }}>${scrammed ? '$1,800,000' : '$0'}</b></span>
+            <span>Relief lifts <b>${cur.reliefTicks}</b> ticks</span>
+            <span>Peak true temp <b>${Math.max(...hist.map(r => r.T)).toFixed(0)} °C</b></span>
+          </div>
+        </section>
+
+        <section class="box">
+          <div class="row" style=${{ justifyContent: 'space-between' }}>
+            <h2>Shift log</h2>
+            <div class="row"><span class="small dim">${copyMsg}</span><button onClick=${copyRun}>Copy run as JSON</button></div>
+          </div>
+          <div class="log" aria-live="polite">${log.map((l, i) => html`<div key=${i} class=${l[2]}><span class="dim">${String(l[0]).padStart(2, '0')}</span><span>${l[1]}</span></div>`)}</div>
+        </section>
+      </div>
+    </div>
+  </div>`;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+</script>
