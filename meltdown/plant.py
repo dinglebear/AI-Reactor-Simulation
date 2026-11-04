@@ -89,7 +89,8 @@ class Plant:
         if t < self.mask_until:
             for k, v in self.mask.items():
                 d[k] = d[k] + v
-        d["incident"] = max(0, d["incident"])
+        for k in ("heat", "stability", "incident"):
+            d[k] = max(0.0, min(100.0, d[k]))
         d["uncertainty"] = round(noise, 1)
         return {k: round(v, 1) if isinstance(v, float) else v for k, v in d.items()}
 

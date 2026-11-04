@@ -1,0 +1,370 @@
+<title>Unit 4 Replay</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a security-desk monitor wall. Map is the big screen; meters, timeline and the feed sit around it. */
+:root {
+  --bg: #0b1014;        /* desk at night */
+  --panel: #121a20;     /* monitor bezel */
+  --line: #24323b;      /* hairlines, walls */
+  --fg: #d7e2e6;
+  --muted: #7f949d;
+  --phosphor: #f2b544;  /* the one accent: alarms, incident, playhead */
+  --danger: #ff5f56;
+  --ok: #59c98a;
+  --blind: #2a1f2e;     /* restrooms: no cameras */
+  --display: "Chakra Petch", "Rajdhani", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body, #root { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--body); }
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px;
+  height: 100%; padding-block: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
+header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
+h1 { font: 700 22px/1 var(--display); letter-spacing: .08em; margin: 0; text-transform: uppercase; }
+h1 span { color: var(--phosphor); }
+.meta { color: var(--muted); font: 12px var(--mono); min-width: 0; }
+.outcome { font: 600 12px var(--mono); padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; }
+.outcome.director { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+.outcome.saboteur { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.spacer { flex: 1; }
+button, select, label.btn { font: 500 12px var(--mono); color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 3px; padding: 6px 10px; cursor: pointer; }
+button:hover, label.btn:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible, input:focus-visible, label.btn:focus-within { outline: 2px solid var(--phosphor); outline-offset: 1px; }
+button.on { border-color: var(--phosphor); color: var(--phosphor); }
+button.primary { background: var(--phosphor); color: #1a1205; border-color: var(--phosphor); font-weight: 600; }
+.screen { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.screen svg { flex: 1; width: 100%; min-height: 0; display: block; }
+.hud { position: absolute; left: 10px; top: 8px; font: 500 12px var(--mono); color: var(--muted); display: flex; gap: 12px; pointer-events: none; }
+.hud b { color: var(--fg); font-family: var(--display); font-size: 20px; letter-spacing: .05em; }
+.hud .rec { color: var(--danger); }
+.layers { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.layers button { padding: 4px 8px; }
+.side { grid-row: 2 / 4; grid-column: 2; display: flex; flex-direction: column; gap: 12px; min-height: 0; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; min-width: 0; }
+.eyebrow { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 8px; }
+.meters { display: grid; gap: 7px; }
+.meter { display: grid; grid-template-columns: 74px minmax(0, 1fr) 38px; align-items: center; gap: 8px; font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+.bar { position: relative; height: 10px; background: #0d1418; border: 1px solid var(--line); border-radius: 2px; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--muted); border-radius: 1px; }
+.bar u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--danger); }
+.meter.inc .bar i { background: var(--phosphor); }
+.meter .v { text-align: right; }
+.systems { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; font: 11px var(--mono); }
+.systems div { border: 1px solid var(--line); border-radius: 2px; padding: 3px 5px; }
+.systems div.low { border-color: var(--danger); color: var(--danger); }
+.flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; font: 11px var(--mono); }
+.chip { border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; color: var(--muted); }
+.chip.hot { color: var(--phosphor); border-color: var(--phosphor); }
+.chip.red { color: var(--danger); border-color: var(--danger); }
+.feed { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.tabs button { flex: 1; }
+.list { overflow-y: auto; min-height: 0; flex: 1; display: grid; align-content: start; gap: 8px; padding-right: 4px; }
+.item { font-size: 13px; border-left: 2px solid var(--line); padding: 2px 0 2px 8px; }
+.item .when { font: 11px var(--mono); color: var(--muted); }
+.item.secret { border-left-color: var(--danger); }
+.item.beat { border-left-color: var(--phosphor); }
+.item.now { background: color-mix(in srgb, var(--phosphor) 8%, transparent); }
+.item q { display: block; color: var(--muted); font-style: italic; quotes: "\201C" "\201D"; margin-top: 2px; }
+.who { font-weight: 600; cursor: pointer; }
+.timeline { grid-column: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; display: grid; gap: 6px; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.clock { font: 700 18px var(--display); letter-spacing: .06em; min-width: 92px; font-variant-numeric: tabular-nums; }
+.track { position: relative; height: 34px; }
+.track canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.track input { position: absolute; inset: 0; width: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.caption { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); background: color-mix(in srgb, var(--bg) 92%, transparent);
+  border: 1px solid var(--phosphor); border-radius: 4px; padding: 12px 14px; box-shadow: 0 8px 30px #0008; }
+.caption h3 { font: 700 15px var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 4px; color: var(--phosphor); }
+.caption p { margin: 0; text-wrap: pretty; }
+.caption q { display: block; margin-top: 8px; color: var(--muted); font-style: italic; }
+.caption .secret { color: var(--danger); font: 600 10px var(--mono); letter-spacing: .1em; }
+.drop { position: absolute; inset: 0; display: grid; place-items: center; background: #0b1014e6; border: 2px dashed var(--phosphor); font: 600 16px var(--display); letter-spacing: .08em; z-index: 5; }
+.profile .name { font: 700 16px var(--display); letter-spacing: .04em; }
+.profile p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font: 11px var(--mono); color: var(--muted); margin-top: 6px; }
+svg text { font-family: var(--mono); }
+@media (max-width: 900px) {
+  html, body, #root { height: auto; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; height: auto; }
+  .screen { min-height: 62vw; }
+  .side { grid-row: auto; grid-column: 1; }
+  .timeline { grid-column: 1; }
+  .feed { height: 420px; flex: none; }
+  .hud { position: static; padding: 8px 10px 0; }
+  .caption { position: static; transform: none; width: auto; margin: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+<script>window.MELTDOWN_REPLAY = /*REPLAY_JSON*/null;</script>
+<script>
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const html = htm.bind(React.createElement);
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const clockOf = (t) => { const s = Math.max(0, Math.floor(t)) + 8 * 3600; const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`; };
+const first = (n) => n.replace("Dr. ", "").split(" ")[0];
+const KIND_COLOR = { card: "#ff5f56", card_start: "#ff5f56", badge_lent: "#ff5f56", clue_found: "#f2b544", arrest: "#ffffff",
+  stage: "#59c98a", pause: "#8fb8ff", corporate: "#8fb8ff", high_alert: "#f2b544", scram: "#ff5f56", end: "#ffffff" };
+
+function prep(R) {
+  const cast = Object.fromEntries(R.cast.map(c => [c.id, c]));
+  const ft = R.frames.map(f => f.t);
+  const speech = R.events.filter(e => e.kind === "speech");
+  const sprints = R.events.filter(e => e.kind === "sprint");
+  return { ...R, castById: cast, ft, speech, sprints, duration: R.meta.duration_s };
+}
+
+function frameIndex(ft, t) { let lo = 0, hi = ft.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ft[mid] <= t) lo = mid; else hi = mid - 1; } return lo; }
+
+function positions(D, t) {
+  const i = frameIndex(D.ft, t), a = D.frames[i], b = D.frames[Math.min(i + 1, D.frames.length - 1)];
+  const span = b.t - a.t || 1, k = Math.min(1, Math.max(0, (t - a.t) / span));
+  const out = {};
+  for (const id in a.p) { const p = a.p[id], q = b.p[id] || p;
+    out[id] = { x: p[0] + (q[0] - p[0]) * k, y: p[1] + (q[1] - p[1]) * k, zone: p[2], pace: p[3], act: p[4] }; }
+  return { pos: out, frame: a };
+}
+
+/* ---------------------------------------------------------------- map */
+function MapView({ D, t, layers, selected, onSelect, focus }) {
+  const { pos, frame } = positions(D, t);
+  const sab = D.meta.saboteur;
+  const det = new Set(frame.det || []);
+  const recentSpeech = layers.comms ? D.speech.filter(e => e.t <= t && t - e.t < 30) : [];
+  const recentSwipes = layers.badges ? D.swipes.filter(s => s.t <= t && t - s.t < 20) : [];
+  const recentSprints = layers.sprints ? D.sprints.filter(s => s.t <= t && t - s.t < 60) : [];
+  const clues = layers.clues ? D.clues.filter(c => c.t <= t) : [];
+  const focusSet = new Set(focus || []);
+  const stationXY = (st) => D.stations[st] ? D.stations[st].xy : null;
+  const zoneCenter = (z) => { const r = D.zones[z].rect; return [r[0] + r[2] / 2, r[1] + r[3] / 2]; };
+  const carriers = frame.carry || {};
+  return html`<svg viewBox="0 0 1000 640" role="img" aria-label="Facility map at ${clockOf(t)}">
+    <defs>
+      <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="8" height="8" fill="var(--blind)"></rect><line x1="0" y1="0" x2="0" y2="8" stroke="#4a3550" stroke-width="3"></line></pattern>
+    </defs>
+    ${Object.entries(D.zones).map(([z, d]) => { const [x, y, w, h] = d.rect;
+      const blind = layers.cctv && !d.cctv;
+      return html`<g key=${z}>
+        <rect x=${x} y=${y} width=${w} height=${h} rx="3" fill=${blind ? "url(#hatch)" : "#0f171c"} stroke=${frame.ha && ["Z2","Z4","Z5","Z6"].includes(z) ? "var(--phosphor)" : "var(--line)"} stroke-width="1.5"></rect>
+        <text x=${x + 8} y=${y + 16} fill="var(--muted)" font-size="11">${z} · ${d.name.toUpperCase()}</text>
+        ${layers.cctv && d.cctv ? html`<circle cx=${x + w - 12} cy=${y + 12} r="4" fill="var(--danger)" opacity=".8"></circle>` : null}
+        ${layers.cctv && !d.cctv ? html`<text x=${x + 8} y=${y + h - 8} fill="#c9a2d6" font-size="10">NO CAMERAS · NO RADIO</text>` : null}
+      </g>`; })}
+    ${D.doors.map(d => html`<rect key=${d.a + d.b} x=${d.xy[0] - 7} y=${d.xy[1] - 7} width="14" height="14" fill="var(--bg)" stroke="var(--muted)" stroke-width="1"></rect>`)}
+    ${Object.entries(D.stations).map(([k, s]) => html`<g key=${k} opacity=".55">
+      <rect x=${s.xy[0] - 4} y=${s.xy[1] - 4} width="8" height="8" fill="none" stroke="var(--muted)"></rect>
+      ${layers.names ? null : html`<text x=${s.xy[0] + 7} y=${s.xy[1] - 6} fill="var(--muted)" font-size="8">${k.replace("_", " ")}</text>`}</g>`)}
+    ${clues.map((c, ci) => { const base = stationXY(c.station) || zoneCenter(c.zone); const found = c.found && c.found_t <= t;
+      const stack = clues.slice(0, ci).filter(o => (o.station || o.zone) === (c.station || c.zone)).length; const xy = [base[0], base[1] + stack * 14];
+      if (!found && !layers.truth) return null;
+      return html`<g key=${c.id} transform=${`translate(${xy[0] + 12},${xy[1] + 12})`}>
+        <path d="M0 -7 L7 0 L0 7 L-7 0 Z" fill=${found ? "var(--phosphor)" : "none"} stroke="var(--phosphor)" stroke-dasharray=${found ? "" : "2 2"}></path>
+        <text x="9" y="4" fill="var(--phosphor)" font-size="9">${c.id} ${c.type}</text></g>`; })}
+    ${recentSprints.map((s, i) => { const p = pos[s.actor]; return p ? html`<circle key=${"sp" + i} cx=${p.x} cy=${p.y} r=${10 + (t - s.t) / 3} fill="none" stroke="var(--phosphor)" opacity=${1 - (t - s.t) / 60}></circle>` : null; })}
+    ${recentSpeech.map((e, i) => { const a = pos[e.actor], b = e.to && pos[e.to]; if (!a) return null;
+      const whisper = e.channel === "whisper";
+      return html`<g key=${"s" + i} opacity=${1 - (t - e.t) / 30}>
+        ${b ? html`<line x1=${a.x} y1=${a.y} x2=${b.x} y2=${b.y} stroke=${whisper ? "#c9a2d6" : "#8fb8ff"} stroke-dasharray=${whisper ? "3 3" : ""} stroke-width="1.2"></line>` : null}
+        <circle cx=${a.x} cy=${a.y} r="13" fill="none" stroke=${whisper ? "#c9a2d6" : "#8fb8ff"}></circle></g>`; })}
+    ${recentSwipes.map((s, i) => { const p = pos[s.holder]; return p ? html`<rect key=${"w" + i} x=${p.x - 9} y=${p.y - 16} width="18" height="7" rx="1" fill=${s.granted ? (s.badge !== s.holder ? "var(--danger)" : "var(--ok)") : "var(--danger)"} opacity=${1 - (t - s.t) / 20}></rect>` : null; })}
+    ${Object.entries(pos).map(([id, p]) => { const c = D.castById[id]; const isSab = id === sab && layers.truth; const sel = id === selected; const foc = focusSet.has(id);
+      const r = c.tier === "director" ? 7.5 : c.tier === "manager" ? 6.5 : 5;
+      return html`<g key=${id} transform=${`translate(${p.x},${p.y})`} style=${{ cursor: "pointer" }} onClick=${() => onSelect(id)}>
+        ${foc ? html`<circle r="16" fill="none" stroke="var(--phosphor)" stroke-width="2"><animate attributeName="r" values="12;18;12" dur="1.4s" repeatCount=${reduceMotion ? "0" : "indefinite"}></animate></circle>` : null}
+        ${isSab ? html`<circle r=${r + 4} fill="none" stroke="var(--danger)" stroke-width="2"></circle>` : null}
+        ${carriers[id] && layers.truth ? html`<rect x="6" y="-12" width="9" height="6" fill="var(--danger)"></rect>` : null}
+        <circle r=${r} fill=${det.has(id) ? "#555" : c.color} stroke=${sel ? "#fff" : p.pace === "s" ? "var(--phosphor)" : "#0b1014"} stroke-width=${sel ? 2.5 : 1.5}></circle>
+        ${det.has(id) ? html`<path d="M-4 -4 L4 4 M4 -4 L-4 4" stroke="#fff" stroke-width="1.5"></path>` : null}
+        ${layers.names || sel || foc ? html`<text x="0" y=${-r - 4} text-anchor="middle" fill="var(--fg)" font-size="9" paint-order="stroke" stroke="#0b1014" stroke-width="3">${first(c.name)}</text>` : null}
+      </g>`; })}
+  </svg>`;
+}
+
+/* ---------------------------------------------------------------- meters */
+function Meters({ D, t, truth }) {
+  const f = D.frames[frameIndex(D.ft, t)];
+  const sh = f.sh, tr = f.tr;
+  const rows = [["Output", "output", 120], ["Heat", "heat", 100], ["Stability", "stability", 100], ["INCIDENT", "incident", 100]];
+  const stage = D.stages.find(s => s.n === f.stage);
+  return html`<section class="panel" aria-label="Plant meters">
+    <p class="eyebrow">Control room console ${truth ? "· red tick = truth" : ""}</p>
+    <div class="meters">${rows.map(([lab, k, max]) => html`<div class=${"meter" + (k === "incident" ? " inc" : "")} key=${k}>
+      <span>${lab}</span><div class="bar"><i style=${{ width: `${Math.min(100, sh[k] / max * 100)}%` }}></i>
+        ${truth && Math.abs(tr[k] - sh[k]) > 0.5 ? html`<u style=${{ left: `${Math.min(100, tr[k] / max * 100)}%` }}></u>` : null}</div>
+      <span class="v">${Math.round(sh[k])}</span></div>`)}</div>
+    <div class="systems">${["core", "coolant", "instruments", "security"].map(s => { const v = (truth ? tr : sh)["h_" + s];
+      return html`<div key=${s} class=${v < 60 ? "low" : ""}>${s.slice(0, 5)} ${Math.round(v)}</div>`; })}</div>
+    <div class="flags">
+      <span class=${"chip" + (stage ? " hot" : "")}>${stage ? `Stage ${stage.n}: ${stage.name}` : "Between stages"}</span>
+      <span class="chip">target ${f.target}</span>
+      ${f.ha ? html`<span class="chip hot">HIGH ALERT</span>` : null}
+      ${truth && f.mask ? html`<span class="chip red">CONSOLE MASKED</span>` : null}
+      ${(f.det || []).length ? html`<span class="chip red">${f.det.length} detained</span>` : null}
+    </div>
+  </section>`;
+}
+
+/* ---------------------------------------------------------------- timeline */
+function Track({ D, t, onSeek }) {
+  const ref = useRef();
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return; const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr;
+    const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+    const X = (s) => s / D.duration * w;
+    g.fillStyle = "#1a2a22"; for (const s of D.stages) { if (s.start < D.duration) g.fillRect(X(s.start), 0, X(Math.min(s.end, D.duration)) - X(s.start), h); }
+    g.strokeStyle = "#f2b544"; g.lineWidth = 1.5; g.beginPath();
+    D.frames.forEach((f, i) => { const x = X(f.t), y = h - 4 - f.tr.incident / 100 * (h - 10); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+    g.strokeStyle = "#7f949d"; g.setLineDash([2, 3]); g.beginPath();
+    D.frames.forEach((f, i) => { const x = X(f.t), y = h - 4 - f.sh.incident / 100 * (h - 10); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); g.setLineDash([]);
+    for (const b of D.story) { g.fillStyle = KIND_COLOR[b.kind] || "#4b5d66"; g.fillRect(X(b.t) - 1, 0, 2, b.weight >= 2 ? 9 : 5); }
+    g.fillStyle = "#f2b544"; g.fillRect(X(t) - 1, 0, 2, h);
+  }, [D, t]);
+  return html`<div class="track"><canvas ref=${ref}></canvas>
+    <input type="range" id="scrub" min="0" max=${D.duration} step="5" value=${t} aria-label="Scrub replay time" onInput=${e => onSeek(+e.target.value)} /></div>`;
+}
+
+/* ---------------------------------------------------------------- feed */
+function Feed({ D, t, tab, setTab, selected, onSelect, truth, onJump }) {
+  const listRef = useRef();
+  const name = (id) => D.castById[id] ? first(D.castById[id].name) : id;
+  let items = [];
+  if (tab === "story") items = D.story.filter(b => b.t <= t && (truth || !b.secret)).slice(-60).reverse();
+  else if (tab === "minds") items = D.thoughts.filter(x => x.t <= t && (!selected || x.agent === selected) && x.thought && (truth || D.castById[x.agent] && !D.castById[x.agent].saboteur || selected)).slice(-80).reverse();
+  else items = D.events.filter(e => e.t <= t && e.kind !== "speech" && (truth || e.public)).slice(-120).reverse();
+  return html`<section class="panel feed" aria-label="Feed">
+    <div class="tabs">${[["story", "Story"], ["minds", "Minds"], ["log", "Log"]].map(([k, l]) => html`<button key=${k} class=${tab === k ? "on" : ""} onClick=${() => setTab(k)}>${l}</button>`)}</div>
+    <div class="list" ref=${listRef}>
+      ${items.length === 0 ? html`<p class="meta">Nothing yet at ${clockOf(t)}. Press play.</p>` : null}
+      ${tab === "story" ? items.map((b, i) => html`<div key=${i} class=${"item beat" + (b.secret ? " secret" : "")} onClick=${() => onJump(b.t)} style=${{ cursor: "pointer" }}>
+          <div class="when">${b.clock} · ${b.title}${b.secret ? " · secret" : ""}</div>${b.text}
+          ${b.inner && (truth || !D.castById[b.inner.agent]?.saboteur) ? html`<q>${name(b.inner.agent)}: ${b.inner.text}</q>` : null}</div>`) : null}
+      ${tab === "minds" ? items.map((x, i) => html`<div key=${i} class="item">
+          <div class="when">${x.clock} · <span class="who" onClick=${() => onSelect(x.agent)}>${name(x.agent)}</span> · ${x.model}</div>
+          <q>${x.thought}</q>
+          ${x.reasoning_summary ? html`<div class="meta">reasoning: ${x.reasoning_summary.slice(0, 400)}</div>` : null}
+          ${x.speech ? html`<div>“${x.speech}” <span class="meta">(${x.channel}${x.to ? " → " + name(x.to) : ""})</span></div>` : null}
+          ${x.actions && x.actions.length ? html`<div class="meta">${x.actions.map(a => [a.type, a.target, a.arg].filter(Boolean).join(" ")).join(" · ")}</div>` : null}</div>`) : null}
+      ${tab === "log" ? items.map((e, i) => html`<div key=${i} class=${"item" + (e.public ? "" : " secret")}><div class="when">${e.clock} · ${e.kind}</div>${e.text}</div>`) : null}
+    </div></section>`;
+}
+
+function Profile({ D, id, onClose, truth }) {
+  if (!id) return html`<section class="panel"><p class="eyebrow">Cast</p>
+    <div class="legend">${[["RX", "Core"], ["HY", "Coolant"], ["IE", "Instruments"], ["SF", "Security"]].map(([k, l]) => html`<span key=${k}><i class="dot" style=${{ background: D.cast.find(c => c.dept === k).color }}></i>${l}</span>`)}
+      <span><i class="dot" style=${{ background: D.cast[0].color }}></i>Director</span></div>
+    <p class="meta" style=${{ marginTop: "8px" }}>Click anyone on the map to follow their thoughts.</p></section>`;
+  const c = D.castById[id];
+  return html`<section class="panel profile"><p class="eyebrow">Following</p>
+    <div class="name"><i class="dot" style=${{ background: c.color }}></i>${c.name} ${truth && c.saboteur ? html`<span class="chip red">SABOTEUR</span>` : null}</div>
+    <p>${c.role} · ${c.archetype} · ${c.model} · badge ${c.clearance}</p><p>${c.personality}</p>
+    <div style=${{ marginTop: "8px" }}><button onClick=${onClose}>Stop following</button></div></section>`;
+}
+
+/* ---------------------------------------------------------------- app */
+function App({ initial }) {
+  const [R, setR] = useState(initial);
+  const D = useMemo(() => R && prep(R), [R]);
+  const [t, setT] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(60);
+  const [tab, setTab] = useState("story");
+  const [selected, setSelected] = useState(null);
+  const [layers, setLayers] = useState({ names: false, cctv: true, badges: true, sprints: true, comms: true, clues: true, truth: false });
+  const [story, setStory] = useState(null);     // index into D.story while narrating
+  const [caption, setCaption] = useState(null);
+  const [drag, setDrag] = useState(false);
+  const tRef = useRef(0); tRef.current = t;
+  const beats = useMemo(() => D ? D.story.filter(b => layers.truth || !b.secret) : [], [D, layers.truth]);
+
+  useEffect(() => { if (!playing || !D) return; let raf, last = performance.now();
+    const loop = (now) => { const dt = (now - last) / 1000; last = now; const nt = Math.min(D.duration, tRef.current + dt * speed);
+      setT(nt); if (nt >= D.duration) { setPlaying(false); return; } raf = requestAnimationFrame(loop); };
+    raf = requestAnimationFrame(loop); return () => cancelAnimationFrame(raf); }, [playing, speed, D]);
+
+  // narrated story: travel to each beat, then hold on a caption
+  useEffect(() => { if (story === null || !D) return; const b = beats[story]; if (!b) { setStory(null); setCaption(null); return; }
+    let raf, timer; setCaption(null); const start = tRef.current; const target = b.t; const lead = Math.max(start, target - 90);
+    if (start > target || target - start > 600) setT(lead);
+    const travel = (now0) => { let last = now0; const step = (now) => { const dt = (now - last) / 1000; last = now; const nt = Math.min(target, tRef.current + dt * 90);
+        setT(nt); if (nt < target) raf = requestAnimationFrame(step); else { setCaption(b); timer = setTimeout(() => setStory(s => s === null ? null : s + 1), 2600 + b.text.length * 28); } };
+      raf = requestAnimationFrame(step); };
+    travel(performance.now());
+    return () => { cancelAnimationFrame(raf); clearTimeout(timer); }; }, [story, D, beats]);
+
+  const load = useCallback((file) => { const rd = new FileReader(); rd.onload = () => { try { const j = JSON.parse(rd.result); setR(j); setT(0); setStory(null); setCaption(null); setSelected(null); } catch (e) { setCaption({ title: "Couldn't read that file", text: "Pick a replay.json written by python -m meltdown.run.", kind: "err" }); } }; rd.readAsText(file); }, []);
+
+  useEffect(() => { const k = (e) => { if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      if (e.code === "Space") { e.preventDefault(); setPlaying(p => !p); setStory(null); }
+      if (e.key === "ArrowRight") { setStory(s => s === null ? null : s + 1); }
+      if (e.key === "Escape") { setStory(null); setCaption(null); } };
+    addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, []);
+
+  const shell = (inner) => html`<div class="app" onDragOver=${e => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)}
+      onDrop=${e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) load(f); }}>${inner}</div>`;
+  const loader = html`<label class="btn">Open replay.json<input type="file" id="file" accept=".json,application/json" hidden onChange=${e => e.target.files[0] && load(e.target.files[0])} /></label>`;
+  if (!D) return shell(html`<header><h1>Unit <span>4</span> Replay</h1><span class="spacer"></span>${loader}</header>
+    <div class="screen" style=${{ display: "grid", placeItems: "center" }}><p class="meta">Drop a replay.json here, or open one. Runs are saved in runs/&lt;run id&gt;/replay.json.</p></div>`);
+
+  const o = D.meta.outcome; const toggle = (k) => setLayers(l => ({ ...l, [k]: !l[k] }));
+  const focus = caption ? caption.focus : null;
+  const sabName = D.castById[D.meta.saboteur].name;
+  const ended = t >= D.duration - 1;
+  return shell(html`
+    <header>
+      <h1>Unit <span>4</span> Replay</h1>
+      <span class="meta">seed ${D.meta.seed} · ${D.meta.mode} · ${D.cast.length} agents · ${D.thoughts.length} turns</span>
+      ${ended || layers.truth ? html`<span class=${"outcome " + o.winner}>${o.result} · ${o.winner} wins</span>` : html`<span class="outcome">outcome hidden until the end</span>`}
+      <span class="spacer"></span>${loader}
+    </header>
+    <div class="screen">
+      <div class="hud"><b>${clockOf(t)}</b><span class="rec">● REC</span><span>UNIT 4 · CAM WALL</span></div>
+      <${MapView} D=${D} t=${t} layers=${layers} selected=${selected} onSelect=${(id) => { setSelected(id); setTab("minds"); }} focus=${focus} />
+      ${caption ? html`<div class="caption" role="status"><h3>${caption.clock ? caption.clock + " · " : ""}${caption.title}</h3>
+        ${caption.secret ? html`<div class="secret">ONLY THE AUDIENCE SEES THIS</div>` : null}<p>${caption.text}</p>
+        ${caption.inner && (layers.truth || !D.castById[caption.inner.agent]?.saboteur) ? html`<q>${first(D.castById[caption.inner.agent].name)}, thinking: ${caption.inner.text}</q>` : null}</div>` : null}
+      ${ended && !caption ? html`<div class="caption"><h3>${o.result}</h3><p>${o.text}</p><q>The saboteur was ${sabName}.</q></div>` : null}
+      <div class="layers" role="group" aria-label="Map layers">
+        ${[["names", "Names"], ["cctv", "Cameras & blind spots"], ["badges", "Badge swipes"], ["sprints", "Sprints"], ["comms", "Talk"], ["clues", "Clues"], ["truth", "Reveal truth"]].map(([k, l]) =>
+          html`<button key=${k} class=${layers[k] ? "on" : ""} aria-pressed=${layers[k]} onClick=${() => toggle(k)}>${l}</button>`)}
+      </div>
+      ${drag ? html`<div class="drop">DROP REPLAY.JSON</div>` : null}
+    </div>
+    <aside class="side">
+      <${Meters} D=${D} t=${t} truth=${layers.truth} />
+      <${Profile} D=${D} id=${selected} onClose=${() => setSelected(null)} truth=${layers.truth} />
+      <${Feed} D=${D} t=${t} tab=${tab} setTab=${setTab} selected=${selected} onSelect=${(id) => { setSelected(id); setTab("minds"); }} truth=${layers.truth}
+        onJump=${(bt) => { setStory(null); setPlaying(false); setT(bt); }} />
+    </aside>
+    <section class="timeline" aria-label="Timeline">
+      <div class="controls">
+        <span class="clock">${clockOf(t).slice(0, 5)}</span>
+        <button class=${playing ? "on" : ""} onClick=${() => { setStory(null); setCaption(null); setPlaying(p => !p); }}>${playing ? "Pause" : "Play"}</button>
+        <select id="speed" aria-label="Playback speed" value=${speed} onChange=${e => setSpeed(+e.target.value)}>
+          ${[15, 30, 60, 120, 300].map(s => html`<option key=${s} value=${s}>${s}× (${s >= 60 ? s / 60 + " game-min/s" : s + " game-s/s"})</option>`)}</select>
+        <button class="primary" onClick=${() => { setPlaying(false); setStory(story === null ? Math.max(0, beats.findIndex(b => b.t >= t)) : null); if (story !== null) setCaption(null); }}>${story === null ? "Play the story" : "Stop story"}</button>
+        ${story !== null ? html`<button onClick=${() => setStory(s => s + 1)}>Next beat →</button>` : null}
+        <span class="meta">${story !== null ? `beat ${story + 1} of ${beats.length}` : "Space play · → next beat · Esc stop"}</span>
+      </div>
+      <${Track} D=${D} t=${t} onSeek=${(v) => { setStory(null); setCaption(null); setT(v); }} />
+      <div class="legend"><span><i class="dot" style=${{ background: "#f2b544" }}></i>true incident</span><span>dotted: console incident</span><span>green bands: test stages</span><span>ticks: story beats</span></div>
+    </section>`);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App} initial=${window.MELTDOWN_REPLAY} />`);
+</script>

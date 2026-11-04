@@ -42,6 +42,8 @@ def build_story(log, world):
         if e.get("target") in world.people:
             focus.append(e["target"])
         text = e["text"]
+        if k == "pause":
+            text = f"Paused for the human player: {e.get('reason')}. The reply: \"{e.get('reply', '')}\""
         inner = None
         if actor in world.people:
             th = _thought_near(log, actor, e["t"])
