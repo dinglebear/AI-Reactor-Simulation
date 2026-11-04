@@ -1,42 +1,55 @@
-"""Zones, doors, badge readers, CCTV and the badge ledger. Coordinates feed the Replay Viewer."""
+"""Zones, doors, stations, badge readers and the badge ledger. Coordinates (px) feed the replay viewer."""
 from __future__ import annotations
 import heapq
 import math
+import zlib
 
 M_PER_PX = 0.3
-SPEEDS = {"walk": 1.3, "hurry": 2.1, "sprint": 4.6}   # m/s
-SWIPE_S = 6
-AIRLOCK_S = 45          # Z4 interlock cycle
-HIGH_ALERT_CHECK_S = 25  # guard cross-check per guarded door
+SPEEDS = {"walk": 1.4, "sprint": 4.2}   # metres per game second
+SWIPE_S = 4
+AIRLOCK_S = 30                          # Z4 interlock cycle
+HIGH_ALERT_CHECK_S = 20                 # guard cross-check per guarded door in High Alert
 
 ZONES = {
     "Z1": dict(name="Admin & Breakroom", rect=(20, 370, 450, 150), reader="L1", cctv=True, radio=True),
     "Z2": dict(name="Master Control Room", rect=(260, 160, 300, 170), reader="L2", cctv=True, radio=True),
     "Z3": dict(name="Turbine & Pump Bay", rect=(500, 370, 300, 150), reader="L2", cctv=True, radio=True),
     "Z4": dict(name="Reactor Hall Airlock", rect=(590, 160, 210, 170), reader="L3", cctv=True, radio=True),
-    "Z5": dict(name="Manual Safety Override Vault", rect=(330, 20, 320, 110), reader="L4", cctv=True, radio=True),
-    "Z6": dict(name="Central Alarm Station", rect=(20, 160, 210, 170), reader="L3-SEC", cctv=True, radio=True),
+    "Z5": dict(name="Override Vault", rect=(330, 20, 320, 110), reader="L4", cctv=True, radio=True),
+    "Z6": dict(name="Central Alarm Station", rect=(20, 160, 210, 170), reader="SEC", cctv=True, radio=True),
     "Z7N": dict(name="Restroom North", rect=(20, 545, 210, 70), reader=None, cctv=False, radio=False),
     "Z7S": dict(name="Restroom South", rect=(560, 545, 210, 70), reader=None, cctv=False, radio=False),
-    "Z8": dict(name="Janitor Closet / Maintenance Locker", rect=(830, 370, 150, 150), reader="L1-U", cctv=True, radio=True),
+    "Z8": dict(name="Janitor Closet", rect=(830, 370, 150, 150), reader="L1-U", cctv=True, radio=True),
 }
-# door point on the shared wall; the reader guards entry into the *second* zone listed in READER_SIDE
+RESTROOMS = ("Z7N", "Z7S")
+
 DOORS = {
     ("Z5", "Z2"): (420, 145), ("Z5", "Z4"): (620, 145), ("Z6", "Z1"): (125, 350),
     ("Z2", "Z1"): (380, 350), ("Z2", "Z4"): (575, 245), ("Z4", "Z3"): (700, 350),
     ("Z1", "Z3"): (485, 445), ("Z3", "Z8"): (815, 445), ("Z1", "Z7N"): (125, 532),
-    ("Z3", "Z7S"): (665, 532),
+    ("Z3", "Z7S"): (665, 532), ("Z6", "Z2"): (245, 245),
 }
-GUARDED = {"Z2", "Z4", "Z5", "Z6"}   # doors a checkpoint guard watches in High Alert
+GUARDED = {"Z2", "Z4", "Z5", "Z6"}
 
-STATIONS = {  # named work spots inside zones, for the viewer and for actions
-    "console": ("Z2", (410, 250)), "director_desk": ("Z2", (300, 200)),
-    "cabinet_A": ("Z4", (650, 200)), "cabinet_B": ("Z4", (760, 300)), "cabinet_C": ("Z5", (600, 60)),
-    "loto_lockbox": ("Z5", (370, 60)), "pump_B": ("Z3", (720, 470)), "heat_balance": ("Z3", (560, 400)),
-    "cas_desk": ("Z6", (120, 240)), "gate": ("Z1", (50, 445)), "breakroom": ("Z1", (250, 470)),
+# work spots. `system` = which abstract plant system the spot services (see plant.py)
+STATIONS = {
+    "control_console": dict(zone="Z2", xy=(410, 250), system="output"),
+    "director_desk": dict(zone="Z2", xy=(300, 200), system=None),
+    "core_panel": dict(zone="Z4", xy=(650, 200), system="core"),
+    "instrument_rack": dict(zone="Z4", xy=(760, 300), system="instruments"),
+    "vault_panel": dict(zone="Z5", xy=(380, 70), system="core"),
+    "backup_rack": dict(zone="Z5", xy=(600, 70), system="instruments"),
+    "coolant_panel": dict(zone="Z3", xy=(720, 470), system="coolant"),
+    "test_bench": dict(zone="Z3", xy=(560, 400), system="coolant"),
+    "cas_desk": dict(zone="Z6", xy=(120, 240), system="security"),
+    "gate": dict(zone="Z1", xy=(50, 445), system="security"),
+    "breakroom": dict(zone="Z1", xy=(250, 470), system=None),
+    "supply_locker": dict(zone="Z8", xy=(905, 445), system=None),
+    "sinks_N": dict(zone="Z7N", xy=(125, 580), system=None),
+    "sinks_S": dict(zone="Z7S", xy=(665, 580), system=None),
 }
 
-CLEARANCE_RANK = {"L1": 1, "L1-U": 1, "L2": 2, "L3": 3, "L4": 4}
+RANK = {"L1": 1, "L1-U": 1, "L2": 2, "L3": 3, "L4": 4}
 
 
 def neighbors(z):
@@ -56,71 +69,73 @@ def center(z):
     return (x + w / 2, y + h / 2)
 
 
-def path(a, b):
-    """Dijkstra over zone graph using door-to-door pixel distance."""
-    pq = [(0.0, a, [a])]
-    seen = set()
-    while pq:
-        d, z, route = heapq.heappop(pq)
-        if z == b:
-            return route
-        if z in seen:
-            continue
-        seen.add(z)
-        here = door(route[-2], z) if len(route) > 1 else center(z)
-        for n in neighbors(z):
-            if n not in seen:
-                dd = math.dist(here, door(z, n))
-                heapq.heappush(pq, (d + dd, n, route + [n]))
+def zone_at(xy):
+    for z, d in ZONES.items():
+        x, y, w, h = d["rect"]
+        if x <= xy[0] <= x + w and y <= xy[1] <= y + h:
+            return z
     return None
 
 
-def can_open(badge_level: str, zone: str) -> bool:
+def route(a, b):
+    """Shortest zone route by door-to-door pixel distance (Dijkstra)."""
+    pq = [(0.0, a, [a])]
+    seen = set()
+    while pq:
+        d, z, r = heapq.heappop(pq)
+        if z == b:
+            return r
+        if z in seen:
+            continue
+        seen.add(z)
+        here = door(r[-2], z) if len(r) > 1 else center(z)
+        for n in neighbors(z):
+            if n not in seen:
+                heapq.heappush(pq, (d + math.dist(here, door(z, n)), n, r + [n]))
+    return None
+
+
+def can_open(clearance: str, zone: str) -> bool:
+    """Badge levels: L1, L1-U (custodian universal), L2, L3, L4, with optional -SEC suffix."""
     need = ZONES[zone]["reader"]
     if need is None:
         return True
+    sec = clearance.endswith("-SEC")
+    lvl = clearance.replace("-SEC", "")
+    if need == "SEC":
+        return sec or lvl == "L4"
     if need == "L1-U":
-        return badge_level in ("L1-U", "L4")
-    if need == "L3-SEC":
-        return badge_level.endswith("SEC") or badge_level == "L4"
-    lvl = badge_level.replace("-SEC", "")
-    if badge_level == "L1-U":
+        return lvl in ("L1-U", "L4")
+    if lvl == "L1-U":
         return zone in ("Z1", "Z2", "Z3")
-    return CLEARANCE_RANK.get(lvl, 0) >= CLEARANCE_RANK[need]
+    return RANK.get(lvl, 0) >= RANK[need]
 
 
-def leg_seconds(route, speed, high_alert=False):
-    """Total travel seconds and per-door timing along a zone route."""
-    pts = [center(route[0])] + [door(route[i], route[i + 1]) for i in range(len(route) - 1)] + [center(route[-1])]
-    dist_px = sum(math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
-    secs = dist_px * M_PER_PX / SPEEDS[speed]
-    for z in route[1:]:
-        if ZONES[z]["reader"]:
-            secs += SWIPE_S
-        if z == "Z4" or route[0] == "Z4":
-            secs += AIRLOCK_S / 2
-        if high_alert and z in GUARDED:
-            secs += HIGH_ALERT_CHECK_S
-    return secs, pts[1:-1]
+def jitter(xy, seed, r=14):
+    """Stable small offset so people at the same station don't overlap."""
+    h = zlib.crc32(seed.encode())
+    a = (h % 360) * math.pi / 180
+    d = 4 + (h >> 9) % r
+    return (xy[0] + math.cos(a) * d, xy[1] + math.sin(a) * d)
 
 
 class BadgeLedger:
-    """Append-only swipe ledger that raises anti-passback and impossible-location alerts."""
+    """Append-only swipe ledger. Raises ANTI_PASSBACK and IMPOSSIBLE_LOCATION alerts."""
 
     def __init__(self):
         self.rows = []
         self.badge_zone = {}     # where the ledger believes each badge is
 
-    def swipe(self, t, badge_id, holder_id, zone, kind="door"):
+    def swipe(self, t, badge_id, holder_id, zone, granted=True):
         alerts = []
         believed = self.badge_zone.get(badge_id)
-        if kind == "door":
-            if believed == zone:
-                alerts.append("ANTI_PASSBACK")
+        if granted and believed == zone:
+            alerts.append("ANTI_PASSBACK")
+        if granted:
             self.badge_zone[badge_id] = zone
-        elif kind == "tap" and believed is not None and believed != zone:
-            alerts.append("IMPOSSIBLE_LOCATION")
-        row = dict(t=t, badge=badge_id, holder=holder_id, zone=zone, kind=kind, alerts=alerts,
-                   believed_zone=believed)
+        row = dict(t=t, badge=badge_id, holder=holder_id, zone=zone, granted=granted, alerts=alerts)
         self.rows.append(row)
         return row
+
+    def window(self, t0, t1):
+        return [r for r in self.rows if t0 <= r["t"] <= t1]
