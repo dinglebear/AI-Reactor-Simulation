@@ -13,7 +13,7 @@ TITLES = {
     "badge_ask": "A whispered favour", "badge_lent": "A favour in the restroom",
     "badge_refused": "A refusal", "clue_found": "A clue", "arrest": "An arrest", "scram": "SCRAM",
     "pause": "The game holds its breath", "high_alert": "Lock-in", "handler_msg": "A message out",
-    "interview": "Under questioning", "sprint": "Someone running", "end": "Noon",
+    "interview": "Under questioning", "run": "Someone running", "end": "Noon",
     "task_done": "A report comes back", "door_denied": "A locked door", "director_to_corporate": "Calling upstairs",
 }
 
@@ -50,15 +50,15 @@ def build_story(log, world):
     beats = [dict(t=0, clock=hhmm(0), kind="note", title="Before we start", text=OPENING, focus=[], zone=None,
                   secret=False, weight=3, inner=None)]
     seen_aside = set()
-    last_sprint = -9999
+    last_run = -9999
     for e in log.events:
         k = e["kind"]
-        if e.get("beat", 0) < 1 and k != "sprint":
+        if e.get("beat", 0) < 1 and k != "run":
             continue
-        if k == "sprint":
-            if e["t"] - last_sprint < 900 or not e.get("witnesses"):
+        if k == "run":
+            if e["t"] - last_run < 900 or not e.get("witnesses"):
                 continue
-            last_sprint = e["t"]
+            last_run = e["t"]
         actor = e.get("actor")
         focus = [actor] if actor in world.people else []
         if e.get("target") in world.people:

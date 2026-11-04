@@ -88,7 +88,8 @@ class World:
             xy = F.jitter(F.STATIONS[st]["xy"], a["id"]) if st else F.jitter(F.center(a["zone"]), a["id"], 40)
             p = Person(id=a["id"], name=a["name"], role=a["role"], tier=a["tier"], dept=a["dept"],
                        clearance=a["clearance"], archetype=a["archetype"], group=a.get("group", "Leadership"),
-                       home=st or "", xy=xy, zone=a["zone"], station=st, badge=a["id"])
+                       home=st or "", xy=xy, zone=F.STATIONS[st]["zone"] if st else a["zone"], station=st,
+                       badge=a["id"])
             p.bladder = self.rng.uniform(0, 55)
             p.next_think = self.rng.uniform(5, 90)
             self.people[p.id] = p
@@ -99,7 +100,7 @@ class World:
         self.manual_target = None
         self.clues: list[Clue] = []
         self.radio_log: list[dict] = []
-        self.cctv_log: list[dict] = []      # sightings worth reviewing (sprints, hand-offs)
+        self.cctv_log: list[dict] = []      # sightings worth reviewing (runs, hand-offs)
         self.cooldowns: dict[str, float] = {}
         self.station_log: list[dict] = []
         self.holds: dict[str, tuple] = {}           # station -> (who said 'leave it', when)
@@ -139,13 +140,20 @@ class World:
         p.next_think = min(p.next_think, max(self.t + delay, p.last_think + MIN_GAP_S))
 
     # ------------------------------------------------------------------ movement
+    def clearances(self, p):
+        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges if b in self.people]
+
+    @staticmethod
+    def nearest_restroom(zone):
+        return min(F.RESTROOMS, key=lambda z: len(F.route(zone, z) or range(99)))
+
     def send(self, p: Person, station: str, pace="walk"):
         if station not in F.STATIONS:
             return f"unknown station {station}"
         if p.detained:
             return "detained"
         dest_zone = F.STATIONS[station]["zone"]
-        r = F.route(p.zone, dest_zone)
+        r = F.route(p.zone, dest_zone, self.clearances(p))
         if r is None:
             return "no route"
         wps = []
@@ -180,13 +188,13 @@ class World:
                     p.waypoints.pop(0)
             if not p.waypoints and p.activity == "moving":
                 p.station = p.dest
-                p.activity = "restroom" if p.dest in ("sinks_N", "sinks_S") else "working"
+                p.activity = "restroom" if p.dest in F.SINKS.values() else "working"
                 if p.activity == "restroom":
                     lo, hi = C.RESTROOM_STAY.get(p.archetype, (60, 150))
                     p.restroom_until = self.t + self.rng.uniform(lo, hi)
                 self.arrived(p)
-            if p.pace == "sprint" and p.activity == "moving":
-                self.sprint_seen(p)
+            if p.pace == "run" and p.activity == "moving":
+                self.run_seen(p)
 
     def cross(self, p: Person, zone: str) -> bool:
         """Walk through a door into `zone`, swiping if it has a reader. Returns False if refused."""
@@ -261,8 +269,8 @@ class World:
                 self.security_alert(f"IMPOSSIBLE_LOCATION: badge {badge} at {zone}, owner on camera in {owner.zone}",
                                     zone)
 
-    def sprint_seen(self, p):
-        if self.rng.random() > 0.25:   # sample, so a sprint isn't logged every step
+    def run_seen(self, p):
+        if self.rng.random() > 0.25:   # sample, so a run isn't logged every step
             return
         witnesses = [q for q in self.in_zone(p.zone, exclude=p.id)]
         on_cam = F.ZONES[p.zone]["cctv"]
@@ -272,11 +280,11 @@ class World:
         if p.saboteur:
             self.sab_heat += 1.0
         if on_cam:
-            self.cctv_log.append(dict(t=self.t, zone=p.zone, who=p.id, what="sprinting"))
+            self.cctv_log.append(dict(t=self.t, zone=p.zone, who=p.id, what="running"))
         for w in witnesses[:4]:
-            self.deliver(w.id, "eyes", f"You saw {p.first} ({p.role}) sprint through {F.ZONES[p.zone]['name']}.",
+            self.deliver(w.id, "eyes", f"You saw {p.first} ({p.role}) run through {F.ZONES[p.zone]['name']}.",
                          "see")
-        self.ev("sprint", f"{p.first} sprinted through {F.ZONES[p.zone]['name']}", actor=p.id, zone=p.zone,
+        self.ev("run", f"{p.first} ran through {F.ZONES[p.zone]['name']}", actor=p.id, zone=p.zone,
                 witnesses=[w.id for w in witnesses])
 
     def arrived(self, p):
@@ -315,9 +323,7 @@ class World:
                 self.go_restroom(p, forced=True)
 
     def go_restroom(self, p, forced=False):
-        n = F.route(p.zone, "Z7N")
-        s = F.route(p.zone, "Z7S")
-        target = "sinks_N" if (n and (not s or len(n) <= len(s))) else "sinks_S"
+        target = F.SINKS[self.nearest_restroom(p.zone)]
         self.send(p, target)
         if forced:
             self.ev("restroom", f"{p.first} couldn't wait any longer and headed to the restroom", actor=p.id,
@@ -533,12 +539,12 @@ class World:
             found = [] if corrupted else [c for c in self.clues if c.type == "cctv" and c.zone == z and not c.found]
             for c in found:
                 self.reveal(c, director.id, director.id)
-            sprints = [s for s in self.cctv_log if s["zone"] == z and s["t"] > self.t - 1800]
+            runs = [s for s in self.cctv_log if s["zone"] == z and s["t"] > self.t - 1800]
             text = f"CCTV {z} last 30 min: " + (
                 "footage is corrupted (security systems degraded)." if corrupted else
                 ("; ".join(c.text for c in found) or "nothing unusual") +
-                (f". Sprinting seen: {', '.join(sorted({self.people[s['who']].first for s in sprints}))}"
-                 if sprints else ""))
+                (f". Running seen: {', '.join(sorted({self.people[s['who']].first for s in runs}))}"
+                 if runs else ""))
             self.pending_results.append((self.t + 60, director.id, dict(frm="CAS", text=text)))
             return "pulling footage (1 min)"
         if kind in ("inspect", "cross_check"):

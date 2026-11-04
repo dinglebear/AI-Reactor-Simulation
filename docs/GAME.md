@@ -5,7 +5,7 @@ Thirty agents work the shift. One of the four department managers is secretly a 
 until noon to pass corporate's test and arrest the right person.
 
 This file describes what the code does today. It supersedes the physics model (section 5) and the sabotage
-pitches (section 2) in [DESIGN.md](DESIGN.md). The map and the cast from DESIGN.md are unchanged.
+pitches (section 2) in [DESIGN.md](DESIGN.md). The cast from DESIGN.md is unchanged; the map below replaces DESIGN.md's map.
 
 ## The plant is a board game
 
@@ -16,7 +16,7 @@ The plant is a handful of 0-100 meters in `meltdown/plant.py`. It is game-tuned 
 | Output | Chases the control room's target, but only while someone is working at the control console |
 | Heat | Rises with output and with the Stage 2 test load, falls with coolant health |
 | Stability | Falls with high heat and weak core or instrument health |
-| **INCIDENT** | Rises while any station sits off its normal setting, and from danger zones (heat over 75, stability under 45). At 100 the saboteur wins |
+| **MELTDOWN** | The game's meltdown meter. Rises while any station sits off its normal setting, and from danger zones (heat over 75, stability under 45). At 100 the plant melts down and the spy wins |
 | System health ×4 | Core, coolant, instruments, security. Each wears down; staff working at the matching station restore it |
 
 The control room sees **shown** values. While the Display Calibration Rack is on `offset` the console reads
@@ -34,7 +34,7 @@ calmer than the truth, and weak instruments add uncertainty. Corporate grades th
 
 | Role | Model (live) | Count | Wants |
 |---|---|---|---|
-| Director, Simone Hart | `claude-opus-5-5` | 1 | Pass the test, keep INCIDENT under 100, arrest the saboteur with evidence |
+| Director, Simone Hart | `claude-opus-5-5` | 1 | Pass the test, keep MELTDOWN under 100, arrest the saboteur with evidence |
 | Managers | `claude-sonnet-5-5` | 4 | Run their department and send SitReps. One of them is the saboteur |
 | Staff and security | `claude-haiku-5-5` | 25 | Do their jobs in character: 17 personality archetypes, from Literal Robot to People Pleaser |
 
@@ -50,12 +50,12 @@ real plant works.
 | Station (zone) | Settings, normal first | Game effect when off normal |
 |---|---|---|
 | Primary Thermal Loop (Z4) | nominal, boost | extra heat load |
-| Display Calibration Rack (Z4) | nominal, offset | console shows calmer heat, stability and INCIDENT |
+| Display Calibration Rack (Z4) | nominal, offset | console shows calmer heat, stability and MELTDOWN |
 | Stabilizer Override Console (Z5, vault) | auto, manual, off | stability target drops |
 | Coolant Bus A / B (Z3) | nominal, reduced, standby | coolant removes less heat |
 | Ventilation Shunt (Z8) | open, closed | extra heat load |
 
-Every station except the Display Calibration Rack also adds to INCIDENT for each minute it sits off normal.
+Every station except the Display Calibration Rack also adds to MELTDOWN for each minute it sits off normal.
 An operator who finds their station off normal will usually put it back and report it.
 
 ### The manned-station rule
@@ -91,26 +91,53 @@ The mock Director interviews the main suspect before an arrest, which is often w
 | Action | Finds | Cost |
 |---|---|---|
 | audit_badges | ledger clues, door alerts | result in 2 min |
-| pull_cctv zone | cctv clues in that zone, sprint sightings | 1 min; footage may be corrupted if security health < 40 |
+| pull_cctv zone | cctv clues in that zone, run sightings | 1 min; footage may be corrupted if security health < 40 |
 | inspect station, person | the station log (paper clues) and its current setting; resets it to normal | a staff member walks there and works 60 s |
 | cross_check person | true meters next to the console, every off-normal station, and the rack's log if masked | a staff member works 90 s at the test bench |
 | interview person | testimony, if they choose to tell | they walk to the Director's desk and answer |
 | read_radio dept | radio clues against that department's manager | 90 s |
 
 `accuse` detains someone. It is **justified** with two different clue types pointing at them. Arresting the
-saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if INCIDENT was really ≥ 60.
+saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if MELTDOWN was really ≥ 60.
+
+## The map
+
+The station is a 1640 × 940 grid of rooms joined by corridors (`meltdown/facility.py`). People route through the
+corridors and avoid rooms their badge can't open.
+
+| Row | Rooms |
+|---|---|
+| Top (secure side) | Central Alarm Station, Master Control Room, Reactor Hall Airlock, Override Vault (only through the airlock), Records Office |
+| Corridors | Main Corridor, Service Corridor, Center Stairwell (no cameras), East Link |
+| Middle | Admin & Lobby (main gate), Breakroom & Canteen, Restroom North, Locker Room (no cameras), Turbine & Pump Bay, Janitor Closet, Storage |
+| Bottom | Restroom South, Training Room, Loading Dock, Restroom East, Smoking Courtyard |
+
+The filler rooms (canteen, lockers, training room, loading dock, courtyard, records) have nothing to change. They
+spread people out and give slackers, patrols and secret conversations somewhere to be.
 
 ## People, doors and restrooms
 
-- **Walk or sprint.** Sprinting is about three times faster. Anyone in the zone and any camera notices, which raises
-  the runner's suspicion and puts a sighting in the CCTV log. Panic-Monsters sprint all day, so a sprint alone proves nothing.
-- **Badges.** Every door with a reader logs a swipe. Clearance levels L1 to L4, plus security (-SEC) and custodian
-  universal (L1-U). Swiping a borrowed badge while cameras show its owner elsewhere creates a ledger clue and may
-  trip an IMPOSSIBLE_LOCATION alarm. Someone without a badge has to tailgate or gets stuck at the door.
+- **Stroll, walk or run.** Stroll (0.8 m/s) is for people with nowhere to be: patrol guards on rounds, a slacker
+  on a break. Walk (1.4 m/s) is getting somewhere. Run (4.2 m/s) is urgent, and anyone in the zone and any camera
+  notices, which raises the runner's suspicion and puts a sighting in the CCTV log. Panic-Monsters run all day, so a
+  run alone proves nothing.
+- **Badges.** Every door with a reader logs a swipe. Corridors have no readers. Clearance levels L1 to L4, plus
+  security (-SEC) and custodian universal (L1-U). Swiping a borrowed badge while cameras show its owner elsewhere
+  creates a ledger clue and may trip an IMPOSSIBLE_LOCATION alarm.
 - **High Alert.** The Director can switch it on: guarded doors take longer, the vault needs two badges, and every
   alarm goes straight to the Director.
-- **Restrooms** (Z7N, Z7S) have no reader, no cameras and no radio. Only whispers work there. Everyone's restroom
-  need builds over the shift (faster for slackers), and ignoring it ends in a forced trip.
+- **Restrooms** (North, South, East) have no reader, no cameras and no radio. Only whispers work there. Everyone's
+  restroom need builds over the shift (faster for slackers), and ignoring it ends in a forced trip.
+
+## How the game ends
+
+- **Meltdown:** the MELTDOWN meter reaches 100. The spy wins.
+- **SCRAM:** the Director shuts the unit down. That stops any meltdown but fails the test. If the meter really was
+  at 60 or more (or the spy was already caught), the shutdown was justified and the Director wins. A panic SCRAM on
+  a calm plant hands the win to the spy.
+- **Caught:** the Director arrests the spy.
+- **Two wrong arrests:** corporate pulls the Director off the floor. The spy wins.
+- **Noon:** if the test failed, the spy got what they were sent for; if it passed, nobody wins.
 
 ## Turns and the clock
 

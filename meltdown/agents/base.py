@@ -9,8 +9,8 @@ from ..plant import STAGES
 CHANNELS = ["none", "say", "whisper", "radio", "exec", "security"]
 
 STAFF_ACTIONS = {
-    "move": "walk to a station (or a zone id). target = station name. Doors log your badge. Set pace to sprint only "
-            "if it's urgent: people notice running.",
+    "move": "walk to a station (or a zone id). target = station name. Doors log your badge. pace: 'stroll' (no hurry, "
+            "e.g. a patrol or a break), 'walk' (getting somewhere), 'run' (urgent; people notice running).",
     "interact": "change a station's setting. target = station, arg = setting. You must be standing at that station. "
                 "If someone else is working at it, they stop you and raise the alarm.",
     "work": "stay at your current station and keep its system healthy",
@@ -85,7 +85,7 @@ def decision_schema(action_types: list[str]) -> dict:
             "channel": {"type": "string", "enum": CHANNELS},
             "to": {"type": "string", "description": "person id you are addressing, or empty"},
             "actions": {"type": "array", "items": act},
-            "pace": {"type": "string", "enum": ["walk", "sprint"]},
+            "pace": {"type": "string", "enum": ["stroll", "walk", "run"]},
             "scratchpad": {"type": "string", "description": f"notes to your future self, max {SCRATCHPAD_CHARS} chars"},
         },
         "required": ["thought", "speech", "channel", "to", "actions", "pace", "scratchpad"],
@@ -101,7 +101,7 @@ THE DAY: Corporate's certification test runs 08:00-12:00 in three stages:
                 f"Pass: {s['rule']}." for s in STAGES) + """
 
 THE PLANT: output (follows the control room's target), heat (rises with output and test load, cooled by the
-coolant system), stability, and the INCIDENT meter. If INCIDENT reaches 100 the game ends badly for everyone except
+coolant system), stability, and the MELTDOWN meter. If MELTDOWN reaches 100 the game ends badly for everyone except
 the saboteur. Four systems (core, coolant, instruments, security) wear down unless staff work at their stations.
 
 HIDDEN ROLE: one of the four department managers is secretly a saboteur working for a rival. Their moves leave
@@ -121,8 +121,11 @@ minutes after they step away, so a change made in that window is logged under th
 under the badge you last used at a door. If a manager tells an operator to "leave it" at a new setting, the
 operator may go along with it, and will remember who said so.
 
-MOVING: walking is normal. Sprinting is fast but anyone nearby and any camera notices, and it looks suspicious.
-Badges: every door with a reader logs a swipe. Restrooms have no reader, no cameras and no radio: only whispers work.
+MOVING: three paces. Stroll is slow and unhurried (patrols, breaks). Walk is normal. Running is fast but anyone
+nearby and any camera notices, and it looks suspicious. Rooms connect through corridors (Main Corridor, Service
+Corridor, Center Stairwell, East Link), which have cameras except the stairwell and no badge readers.
+Badges: every door with a reader logs a swipe. The three restrooms have no reader, no cameras and no radio: only
+whispers work. The Locker Room has no cameras either.
 You get restroom urges over time; ignore them too long and you will have to go anyway.
 
 TALKING (the speak verb): fill `speech`, `channel` and `to`. Channel 'say' = everyone in your zone hears; 'whisper' = one person in your zone (set `to`);
@@ -147,16 +150,16 @@ def system_prompt(world, p) -> str:
           + f". Badge clearance {p.clearance}. Home station: {p.home or 'none'}.\n"
           + f"Personality ({p.archetype}): {C.PERSONALITY[p.archetype]}\n")
     if p.tier == "director":
-        goal = ("GOAL: pass the certification test, keep INCIDENT below 100, and arrest the saboteur with evidence. "
+        goal = ("GOAL: pass the certification test, keep MELTDOWN below 100, and arrest the saboteur with evidence. "
                 f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
                 "wants the pass; you want a plant that's still standing.")
     elif p.saboteur:
         goal = ("SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 years ago, "
                 "and you worked your way up to department manager. Your team trusts you, the Director relies on you, "
                 "and nobody knows. Today your handler at the rival company wants Unit 4's certification test to "
-                "fail: INCIDENT at 100 before 12:00, or the Director discredited by two wrong arrests. Your cover is "
+                "fail: MELTDOWN at 100 before 12:00, or the Director discredited by two wrong arrests. Your cover is "
                 "everything: keep acting like the manager everyone knows.\n"
-                "Stations left off their normal setting push INCIDENT up; the Display Calibration Rack on 'offset' "
+                "Stations left off their normal setting push MELTDOWN up; the Display Calibration Rack on 'offset' "
                 "makes the control room console look calm. But a station can't be touched while someone works at it. "
                 "Get them away: give a convincing reason to be elsewhere, wait for their restroom break, or catch "
                 "them alone. Everything leaves traces: station logs record the badge that was used (a borrowed one "
@@ -194,7 +197,7 @@ def observation(world, p) -> str:
     if p.zone == "Z2" or p.tier == "director":
         sh = world.plant.shown(t)
         lines.append(f"CONSOLE: output {sh['output']:.0f} (target {world.plant.target:.0f}), heat {sh['heat']:.0f}, "
-                     f"stability {sh['stability']:.0f}, INCIDENT {sh['incident']:.0f}. Systems: core {sh['h_core']:.0f}, "
+                     f"stability {sh['stability']:.0f}, MELTDOWN {sh['incident']:.0f}. Systems: core {sh['h_core']:.0f}, "
                      f"coolant {sh['h_coolant']:.0f}, instruments {sh['h_instruments']:.0f}, security "
                      f"{sh['h_security']:.0f}." + (f" (instrument uncertainty +/-{sh['uncertainty']})" if sh['uncertainty'] else ""))
     elif p.station and F.STATIONS[p.station]["system"] not in (None, "output"):
@@ -239,7 +242,7 @@ def observation(world, p) -> str:
         heat = world.sab_heat
         mood = "nobody is looking at you" if heat < 6 else "people are starting to ask questions" if heat < 14 \
             else "you are under real suspicion"
-        lines.append(f"[secret] True INCIDENT {world.plant.incident:.0f}. Stations: {cds}. Heat: {mood}."
+        lines.append(f"[secret] True MELTDOWN {world.plant.incident:.0f}. Stations: {cds}. Heat: {mood}."
                      + (f" You carry borrowed badges: {', '.join(p.extra_badges)}." if p.extra_badges else ""))
     if p.lent_to:
         lines.append(f"You lent your badge to {world.people[p.lent_to].first}. Doors with readers won't open for you.")

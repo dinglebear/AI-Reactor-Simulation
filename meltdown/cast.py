@@ -54,7 +54,7 @@ PERSONALITY = {
     "Weary Veteran": "Has seen every alarm this plant can throw. Slow to panic, quick to spot something that doesn't fit the pattern.",
     "Daydreamer": "Means well, drifts off. Misses things right in front of them, then remembers them hours later.",
     "Corporate Yes-Man": "Repeats whatever the boss said last. Will report a problem only if someone senior already did.",
-    "Panic-Monster": "Every blip is the end of the world. Sprints everywhere, escalates everything, cries wolf a lot.",
+    "Panic-Monster": "Every blip is the end of the world. Runs everywhere, escalates everything, cries wolf a lot.",
     "Chaos Prankster": "Bored and mischievous. Starts rumors for fun and hides people's coffee mugs.",
     "Hot-Head": "Short fuse, big heart. Confronts people directly and loudly when something seems off.",
     "Bureaucratic Slacker": "Long restroom breaks, longer coffee breaks. Knows every form and fills in none of them.",

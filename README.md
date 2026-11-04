@@ -33,12 +33,21 @@ second (0 = flat out), `--log-prompts` stores every agent's full observation, `-
 python -m meltdown.viewer runs/latest --open
 ```
 
-This writes `runs/latest/replay.html`, a single file with the replay inside. You can also open `viewer/index.html`
-in a browser and drop any `replay.json` on it.
+This writes `runs/latest/replay.html`, a single file with the replay and the viewer's libraries built in, so it
+works offline. Pass several runs (`python -m meltdown.viewer runs/A runs/B --out all.html`) to get a run picker. You
+can also open `viewer/index.html` in a browser and drop one or more `replay.json` files on it.
 
-The viewer has an animated map, layer toggles (names, cameras and blind spots, badge swipes, sprints, talk, clues,
-reveal truth), console meters with the true values as a red tick, a timeline with the incident curve, a feed of story
-beats, agent thoughts and the raw log, and **Play the story**, which travels from beat to beat with narration captions.
+The viewer has:
+
+- a large animated map of rooms and corridors with furniture, people as colored initials, walking trails, speech
+  bubbles, restroom tags, and station consoles that show a padlock while someone works at them (and glow red when
+  off normal, under Reveal truth)
+- a room zoom (double-click a room or pick it from the list) with a card that estimates what's going on in there
+- **Play the story**: the camera flies into the room for each beat, with title cards for the stages, and ends by
+  unmasking the spy and listing their secret moves
+- **Spy-cam**, which follows the spy and shows their private thoughts next to what everyone else hears
+- the cast sorted by department color, name or room, the console meters with the truth as a red tick, a timeline
+  with the meltdown curve, and Story / Minds / Log feeds
 
 ## Cost of a live run
 

@@ -2,7 +2,7 @@
 
 Everything is a 0-100 meter. Four systems wear down and are kept up by staff working at stations.
 Fictional station settings (facility.SETTINGS) change how the meters move; off-nominal settings push the
-INCIDENT meter up, and at 100 the game ends. The control room only sees the *shown* values, which the
+MELTDOWN meter up, and at 100 the game ends. The control room only sees the *shown* values, which the
 Display Calibration Rack can skew.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ BUS = {"nominal": 1.0, "reduced": 0.6, "standby": 0.25}
 SYSTEMS = ("core", "coolant", "instruments", "security")
 WEAR_PER_MIN = {"core": 0.25, "coolant": 0.35, "instruments": 0.2, "security": 0.15}
 REPAIR_PER_MIN = 1.0          # one worker at a matching station
-INCIDENT_LIMIT = 100.0
+MELTDOWN_LIMIT = 100.0
 
 # Corporate certification test. Targets are console output %.
 STAGES = [
@@ -48,7 +48,7 @@ class Plant:
     health: dict = field(default_factory=lambda: {s: 90.0 for s in SYSTEMS})
     settings: dict = field(default_factory=lambda: {k: v["nominal"] for k, v in SETTINGS.items()})
     scrammed: bool = False
-    status: str = "RUNNING"       # RUNNING | INCIDENT | SCRAM
+    status: str = "RUNNING"       # RUNNING | MELTDOWN | SCRAM
     stage_minutes: dict = field(default_factory=lambda: {1: 0.0, 2: 0.0, 3: 0.0})
 
     def step(self, t: float, dt: float, crew_at: dict):
@@ -82,12 +82,12 @@ class Plant:
         self.stability = max(0.0, min(100.0, self.stability))
         # incident meter: driven by danger zones, slowly calms when the plant is healthy
         off = sum(1 for k, v in se.items() if v != SETTINGS[k]["nominal"] and k != "display_calibration")
-        danger = max(0, self.heat - 75) * 0.6 + max(0, 45 - self.stability) * 0.5 + 0.6 * off
+        danger = max(0, self.heat - 75) * 0.6 + max(0, 45 - self.stability) * 0.5 + 1.4 * off
         calm = 0.1 if (self.heat < 65 and self.stability > 70) else 0.0
         self.incident = max(0.0, self.incident + (danger - calm) * m)
-        if self.incident >= INCIDENT_LIMIT:
-            self.incident = INCIDENT_LIMIT
-            self.status = "INCIDENT"
+        if self.incident >= MELTDOWN_LIMIT:
+            self.incident = MELTDOWN_LIMIT
+            self.status = "MELTDOWN"
         self._grade(t, m)
 
     def shown(self, t: float) -> dict:

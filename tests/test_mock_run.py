@@ -18,7 +18,7 @@ class MockRun(unittest.TestCase):
     def test_full_game_and_replay(self):
         d, rep = self.run_game(3)
         self.assertIn(rep["meta"]["outcome"]["result"],
-                      {"CAUGHT", "INCIDENT", "WRONG_ARRESTS", "SCRAM", "SHIFT_END"})
+                      {"CAUGHT", "MELTDOWN", "WRONG_ARRESTS", "SCRAM", "SHIFT_END"})
         with open(os.path.join(d, "replay.json")) as fh:
             disk = json.load(fh)
         self.assertEqual(len(disk["cast"]), 30)

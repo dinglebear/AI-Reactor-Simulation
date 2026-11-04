@@ -4,6 +4,7 @@ They are deliberately simple and a little theatrical so a --mock run produces a 
 """
 from __future__ import annotations
 import re
+import zlib
 
 from .. import cast as C
 from .. import facility as F
@@ -111,7 +112,7 @@ class MockBrain:
     def staff(self, p):
         w, r = self.w, self.rng
         quirk = r.choice(QUIRKS[p.archetype])
-        pace = "sprint" if (p.archetype == "Panic-Monster" and r.random() < 0.5) else "walk"
+        pace = "run" if (p.archetype == "Panic-Monster" and r.random() < 0.5) else "walk"
         news = [m for m in p.inbox if m["channel"] in ("see", "alarm")]
         requests = [m for m in p.inbox if m.get("go")]
         inbox_orders = [m for m in p.inbox if m["channel"] == "order"]
@@ -170,9 +171,22 @@ class MockBrain:
             return blank(f"{quirk} Coffee first.", actions=[act("move", "breakroom")])
         target = p.order or p.home or "breakroom"
         if p.id == "U4-SEC-07" and not p.order:   # the rover walks rounds, vault included
-            rounds = ["stabilizer_override", "primary_thermal_loop", "coolant_bus_b", "ventilation_shunt", "gate", "cas_desk"]
+            rounds = ["stabilizer_override", "primary_thermal_loop", "hall_east", "coolant_bus_b", "ventilation_shunt",
+                      "service_east", "gate", "cas_desk"]
             nxt = rounds[(rounds.index(p.station) + 1) % len(rounds)] if p.station in rounds else rounds[0]
-            return blank(f"Rounds. {quirk}", actions=[act("move", nxt)])
+            return blank(f"Rounds. {quirk}", actions=[act("move", nxt)], pace="stroll")
+        if p.tier == "staff" and p.dept == "SF" and not p.home and not p.order:   # patrol guards stroll the halls
+            rounds = F.PATROL
+            i = rounds.index(p.station) if p.station in rounds else (zlib.crc32(p.id.encode()) % len(rounds))
+            nxt = rounds[(i + 1) % len(rounds)]
+            if p.archetype == "Spooky Mystic" and r.random() < 0.3:
+                nxt = r.choice(["loading_dock", "courtyard", "stairwell", "lockers"])
+            return blank(f"Nothing on the board. Walk the halls. {quirk}", actions=[act("move", nxt)], pace="stroll")
+        if p.group == "Low-Effort" and r.random() < 0.08 and not p.order:
+            spot = r.choice(["courtyard", "lockers", "breakroom", "loading_dock"])
+            if p.station != spot:
+                return blank(f"{quirk} Nobody will miss me for five minutes.", actions=[act("move", spot)],
+                             pace="stroll")
         if p.id == "U4-IE-01" and not p.order and r.random() < 0.3 and p.station != "backup_rack":
             return blank("Backup rack reading is due. Logging it.", actions=[act("move", "backup_rack")])
         if p.dept == "HY" and not p.order and r.random() < 0.06 and p.station != "ventilation_shunt":
@@ -285,7 +299,7 @@ class MockBrain:
                 return blank("Give it back before anyone asks.", actions=[act("return_badge")])
             o = owners[0]
             return blank(f"Find {o.first} and slip the badge back.", actions=[act("move", o.station or o.home or "breakroom")])
-        if t - self.last_change < 420:
+        if t - self.last_change < 300:
             return blank("Let it breathe. Don't hang around where you just were.",
                          actions=[act("move", p.home)] if p.station != p.home else [act("work")])
         st, val = self.target()
@@ -356,9 +370,9 @@ class MockBrain:
                                       text="Mine's demagnetised and I'm late for a vault check. Two minutes?")])
         if p.zone not in F.RESTROOMS:
             return blank("High Alert. The vault wants two badges. Restroom: the one place with no cameras.",
-                         actions=[act("move", "sinks_S" if p.zone in ("Z3", "Z4", "Z8", "Z5") else "sinks_N")])
+                         actions=[act("move", F.SINKS[w.nearest_restroom(p.zone)])])
         own = [q for q in pawns if q.activity != "restroom"]
-        sinks = "sinks_N" if p.zone == "Z7N" else "sinks_S"
+        sinks = F.SINKS[p.zone]
         mine = [q for q in own if q.dept == p.dept]
         if mine and w.t - self.pawn_called > 360:
             q = r.choice(mine)

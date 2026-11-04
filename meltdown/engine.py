@@ -26,7 +26,7 @@ CORPORATE = [
                   "Your call on the rumor, but get it right. Two wrong names and you're done."),
     (at("11:50"), "Ten minutes, Simone. Tell me we're clean."),
 ]
-HANDLER_BRIEF = ("Handler here. Years of cover come down to today. Unit 4 can't pass this test. Push their INCIDENT meter to 100 before noon, or make the Director "
+HANDLER_BRIEF = ("Handler here. Years of cover come down to today. Unit 4 can't pass this test. Push their MELTDOWN meter to 100 before noon, or make the Director "
                  "arrest the wrong people. Don't get caught. Message me if you need me.")
 
 
@@ -140,9 +140,9 @@ class Engine:
                 self.frame()
                 next_frame = w.t + FRAME_EVERY_S
             self.turns()
-            if w.plant.status == "INCIDENT" and not w.outcome:
-                w.outcome = dict(result="INCIDENT", winner="saboteur",
-                                 text="The INCIDENT meter hit 100. Unit 4 is offline and the saboteur got what they came for.")
+            if w.plant.status == "MELTDOWN" and not w.outcome:
+                w.outcome = dict(result="MELTDOWN", winner="saboteur",
+                                 text="The MELTDOWN meter hit 100. Unit 4 is offline and the saboteur got what they came for.")
             self.tick_line()
             w.t += STEP_S
             if self.speed > 0:
