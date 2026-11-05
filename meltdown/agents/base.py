@@ -121,6 +121,13 @@ minutes after they step away, so a change made in that window is logged under th
 under the badge you last used at a door. If a manager tells an operator to "leave it" at a new setting, the
 operator may go along with it, and will remember who said so.
 
+BREAK ROTA: staff get a 15-minute coffee break and a 30-minute early lunch, staggered by department and split in
+two halves. The canteen fills up and some stations go quiet for a while.
+ALARMS: the building alarm follows the control room CONSOLE's meltdown meter: advisory at 40, plant alert at 60
+(breaks cancelled, everyone to their post), site emergency at 80 (sirens; non-essential staff muster in the
+courtyard). During the test stages the test rig also raises EXPECTED warnings, labelled [test warning]; they are
+part of the test and not by themselves a sign of trouble. Telling the two apart is part of the job.
+
 MOVING: three paces. Stroll is slow and unhurried (patrols, breaks). Walk is normal. Running is fast but anyone
 nearby and any camera notices, and it looks suspicious. Rooms connect through corridors (Main Corridor, Service
 Corridor, Center Stairwell, East Link), which have cameras except the stairwell and no badge readers.
@@ -253,6 +260,14 @@ def observation(world, p) -> str:
             lines.append("PENDING: the Director summoned you for an interview. Go to director_desk (Z2) and use answer.")
     if p.order:
         lines.append(f"Your latest order: go to {p.order}.")
+    if p.break_kind:
+        lines.append(f"You are on your {p.break_kind} break until {hhmm(p.break_until)}.")
+    elif p.breaks:
+        k, st, mins = p.breaks[0]
+        lines.append(f"Your next scheduled break: {k} at {hhmm(st)} ({mins} min).")
+    if world.alarm_level:
+        lines.append(f"BUILDING ALARM LEVEL {world.alarm_level} is sounding "
+                     f"({['', 'advisory', 'plant alert', 'site emergency'][world.alarm_level]}).")
     if p.bladder > 70:
         lines.append("You really need the restroom soon." if p.bladder < 90 else "You need the restroom NOW.")
     if p.inbox:

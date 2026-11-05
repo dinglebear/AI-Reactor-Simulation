@@ -113,7 +113,8 @@ class MockBrain:
         w, r = self.w, self.rng
         quirk = r.choice(QUIRKS[p.archetype])
         pace = "run" if (p.archetype == "Panic-Monster" and r.random() < 0.5) else "walk"
-        news = [m for m in p.inbox if m["channel"] in ("see", "alarm")]
+        news = [m for m in p.inbox if m["channel"] in ("see", "alarm")
+                and not m["text"].startswith(("[building alarm]", "[test warning]"))]
         requests = [m for m in p.inbox if m.get("go")]
         inbox_orders = [m for m in p.inbox if m["channel"] == "order"]
         p.inbox.clear()
@@ -136,6 +137,24 @@ class MockBrain:
                          pace=pace)
         if p.activity in ("moving", "restroom"):
             return blank(quirk)
+        if w.alarm_level >= 3 and not (p.home and F.STATIONS[p.home]["system"]) and p.station != "courtyard":
+            return blank("Sirens. Muster point is the courtyard. Go, go.", speech="Everyone out to the courtyard!",
+                         channel="say", actions=[act("move", "courtyard")], pace="run")
+        if w.alarm_level >= 2 and p.home and p.station != p.home:
+            return blank(f"That's the building alarm. Back to my post. {quirk}",
+                         actions=[act("move", p.home)], pace="run" if p.group == "Volatile" else "walk")
+        if p.break_kind and w.alarm_level < 2:
+            spot = "breakroom" if p.break_kind == "lunch" else ("courtyard" if p.group == "Low-Effort" else "breakroom")
+            if p.station != spot:
+                return blank(f"{p.break_kind.capitalize()} break. Finally. {quirk}", actions=[act("move", spot)], pace="stroll")
+            if r.random() < 0.25:
+                mates = [q for q in w.in_zone(p.zone, exclude=p.id) if q.break_kind]
+                if mates:
+                    q = r.choice(mates)
+                    line = r.choice([f"{q.first}, did you hear about the test numbers?", "Is the coffee machine fixed yet?",
+                                     f"{q.first}, who's covering your station?", "I give this test fifty-fifty."])
+                    return blank(f"Small talk. {quirk}", speech=line, channel="say", actions=[act("wait")])
+            return blank("Eating. Not thinking about the plant for ten minutes.", actions=[act("wait")])
         if p.lent_to:
             return blank(f"{w.people[p.lent_to].first} still has my badge. I'll stay put until it comes back. "
                          "Should I tell someone?", actions=[act("work")])

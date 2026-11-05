@@ -116,6 +116,15 @@ button.spy.on { border-color: var(--danger); color: var(--danger); }
 .roomcard .est { color: var(--phosphor); }
 .spypanel { border-color: color-mix(in srgb, var(--danger) 60%, transparent); }
 .spypanel q { display: block; font-style: italic; margin-top: 4px; }
+.alarmbar { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); font: 700 13px var(--display); letter-spacing: .14em; padding: 5px 14px; border-radius: 3px; z-index: 3; pointer-events: none; text-transform: uppercase; white-space: nowrap; }
+.alarmbar.l1 { background: #3a2a08; color: var(--phosphor); border: 1px solid var(--phosphor); }
+.alarmbar.l2 { background: #3a1210; color: #ffb3ad; border: 1px solid var(--danger); animation: blink 1.2s steps(2) infinite; }
+.alarmbar.l3 { background: var(--danger); color: #1a0505; animation: blink .6s steps(2) infinite; }
+.alarmbar.test { top: 40px; background: #1d2433; color: var(--talk); border: 1px dashed var(--talk); font-size: 11px; }
+.strobe { position: absolute; inset: 0; pointer-events: none; z-index: 2; box-shadow: inset 0 0 0 3px var(--danger), inset 0 0 80px #ff5f5655; }
+.strobe.l3 { animation: strobe .8s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .45; } }
+@keyframes strobe { 0%, 100% { background: #ff5f5600; } 50% { background: #ff5f5622; } }
 .drop { position: absolute; inset: 0; display: grid; place-items: center; background: #0b1014e6; border: 2px dashed var(--phosphor); font: 600 16px var(--display); letter-spacing: .08em; z-index: 5; }
 .profile .name { font: 700 16px var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .profile p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
@@ -161,7 +170,7 @@ const clockOf = (t) => { const s = Math.max(0, Math.floor(t)) + 8 * 3600; const 
 const first = (n) => n.replace("Dr. ", "").split(" ")[0];
 const initials = (n) => { const p = n.replace("Dr. ", "").split(" "); return (p[0][0] + (p[1] ? p[1][0] : "")).toUpperCase(); };
 const KIND_COLOR = { interact: "#ff5f56", lure: "#ff9f43", blocked: "#f2b544", badge_ask: "#ff9f43", note: "#8fb8ff", badge_lent: "#ff5f56", clue_found: "#f2b544", arrest: "#ffffff",
-  stage: "#59c98a", pause: "#8fb8ff", corporate: "#8fb8ff", high_alert: "#f2b544", scram: "#ff5f56", end: "#ffffff", spy: "#ff5f56" };
+  stage: "#59c98a", pause: "#8fb8ff", corporate: "#8fb8ff", high_alert: "#f2b544", scram: "#ff5f56", end: "#ffffff", spy: "#ff5f56", plant_alarm: "#ff5f56", test_warning: "#f2b544", break: "#59c98a" };
 const SPY_KINDS = new Set(["spy", "interact", "lure", "blocked", "badge_ask", "badge_lent", "handler_msg"]);
 const TITLE_KINDS = new Set(["start", "stage", "end"]);
 const DEPT_ORDER = { null: 0, RX: 1, HY: 2, IE: 3, SF: 4 };
@@ -545,6 +554,11 @@ function App({ initial }) {
     </header>
     <div class="screen">
       <${MapView} D=${D} t=${t} layers=${{ ...layers, truth }} selected=${selected} onSelect=${pick} focus=${focus} cam=${cam} onRoom=${(z) => { setRoom(z); setSpyCam(false); }} />
+      ${(() => { const f = D.frames[frameIndex(D.ft, t)]; const al = f.al || 0;
+        const tw = D.events.filter(e => e.kind === "test_warning" && e.t <= t && t - e.t < 90).slice(-1)[0];
+        return html`${al >= 2 ? html`<div class=${"strobe l" + al}></div>` : null}
+          ${al ? html`<div class=${"alarmbar l" + al} role="alert">${["", "Advisory", "Plant alert · building alarm", "Site emergency · sirens"][al]}</div>` : null}
+          ${tw ? html`<div class="alarmbar test">Test rig warning · expected · part of the test</div>` : null}`; })()}
       <div class="hud"><b>${clockOf(t)}</b><span class="rec">● REC</span><span>${spyCam ? "SPY-CAM" : "UNIT 4 · CAM WALL"}</span>${zoomZone ? html`<span class="where">${D.zones[zoomZone].name.toUpperCase()}</span>` : null}</div>
       <div class="zoombar">
         <select aria-label="Zoom to a room" value=${room || ""} onChange=${e => { setRoom(e.target.value || null); setSpyCam(false); }}>

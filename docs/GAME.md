@@ -67,7 +67,8 @@ the operator holds a witness account. So the saboteur has to get the operator aw
 - **Lie.** Tell them the Director wants them in the breakroom, or that a delivery is waiting at the gate. A request
   from someone who isn't their boss, or a false "the Director wants you", becomes a witness account they can repeat
   in an interview (plus a radio-log clue if it went over the radio).
-- **Wait for a break.** Restroom need builds over the shift. The saboteur can hover until the operator has to go.
+- **Wait for a break.** Restroom need builds over the shift, and the break rota (below) sends half a department to
+  coffee or lunch at a time. The saboteur can hover until the operator has to go.
 - **"Leave it, it's signed off."** After a change, a manager can tell the regular operator to leave the new setting
   alone. Compliant staff often do. That instruction is itself a witness account.
 
@@ -128,6 +129,22 @@ spread people out and give slackers, patrols and secret conversations somewhere 
   alarm goes straight to the Director.
 - **Restrooms** (North, South, East) have no reader, no cameras and no radio. Only whispers work there. Everyone's
   restroom need builds over the shift (faster for slackers), and ignoring it ends in a forced trip.
+
+## Breaks, alarms and test warnings
+
+- **Break rota.** Every staff member gets a 15-minute coffee break (09:05-10:45) and a 30-minute early lunch
+  (10:50-11:50), staggered by department and split into two halves. The canteen fills up and stations thin out.
+  Managers and the Director don't get scheduled breaks.
+- **Building alarms** follow the control room console's meltdown reading: advisory at 40, plant alert at 60
+  (breaks cancelled, everyone back to their post), site emergency at 80 (sirens; staff without a post muster in the
+  courtyard). Because they read the console, a masked console keeps them quiet. These are game thresholds, not a
+  model of a real alarm system.
+- **Test warnings.** At set times the test rig raises expected warnings (high output, heat pulses, a stability
+  sweep). They are labelled as part of the test, but they land on the same desks as real trouble, which gives the
+  spy cover and the Director something to second-guess.
+
+The meltdown meter is deliberately not realistic. It is a game score: it climbs while stations sit off normal and
+when heat or stability are in their danger bands, and it calms slowly when things are fine.
 
 ## How the game ends
 

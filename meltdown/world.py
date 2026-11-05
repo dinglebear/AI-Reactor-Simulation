@@ -37,6 +37,9 @@ class Person:
     lent_to: str | None = None
     bladder: float = 0.0
     restroom_until: float = 0.0
+    breaks: list = field(default_factory=list)     # [(kind, start, minutes)] from the rota
+    break_until: float = 0.0
+    break_kind: str = ""
     scratchpad: str = ""
     inbox: list = field(default_factory=list)
     next_think: float = 0.0
@@ -93,6 +96,8 @@ class World:
             p.bladder = self.rng.uniform(0, 55)
             p.next_think = self.rng.uniform(5, 90)
             self.people[p.id] = p
+        self.make_rota()
+        self.alarm_level = 0
         self.saboteur_id = f"U4-MGR-{saboteur_dept}"
         self.people[self.saboteur_id].saboteur = True
         self.director = self.people["U4-DIR"]
@@ -140,6 +145,43 @@ class World:
         p.next_think = min(p.next_think, max(self.t + delay, p.last_think + MIN_GAP_S))
 
     # ------------------------------------------------------------------ movement
+    # ------------------------------------------------------------------ break rota
+    COFFEE = {"RX": "09:05", "HY": "09:25", "IE": "10:05", "SF": "10:25"}
+    LUNCH = {"RX": "10:50", "HY": "11:05", "IE": "11:20", "SF": "11:35"}
+
+    def make_rota(self):
+        """Staggered coffee (15 min) and early lunch (30 min). Each department splits into two halves 20 minutes
+        apart, so stations thin out rather than empty, but a quiet station is never far away."""
+        from .config import at
+        for i, p in enumerate(sorted((q for q in self.people.values() if q.tier == "staff"), key=lambda q: q.id)):
+            half = 0 if (int(p.id[-2:]) % 2) else 1200
+            p.breaks = [("coffee", at(self.COFFEE[p.dept]) + half, 15), ("lunch", at(self.LUNCH[p.dept]) + half // 2, 30)]
+
+    def step_rota(self):
+        started = {}
+        for p in self.people.values():
+            if p.detained:
+                continue
+            if p.break_kind and self.t >= p.break_until:
+                p.break_kind = ""
+                self.deliver(p.id, "Rota", "Your break is over. Back to your post.", "rota", wake=True)
+            for b in list(p.breaks):
+                kind, start, mins = b
+                if self.t >= start:
+                    p.breaks.remove(b)
+                    if self.alarm_level >= 2:
+                        self.deliver(p.id, "Rota", f"Your {kind} break is cancelled: the plant alarm is on.", "rota")
+                        continue
+                    p.break_kind, p.break_until = kind, self.t + mins * 60
+                    spot = "the canteen" if kind == "lunch" else "the breakroom"
+                    self.deliver(p.id, "Rota", f"Your {kind} break starts now ({mins} min). {spot.capitalize()} is open.",
+                                 "rota", wake=True)
+                    started.setdefault(kind, []).append(p.first)
+
+        for kind, names in started.items():
+            where = "the canteen" if kind == "lunch" else "coffee"
+            self.ev("break", f"{kind.capitalize()} break: {', '.join(names)} head off to {where}.", beat=1)
+
     def clearances(self, p):
         return [p.clearance] + [self.people[b].clearance for b in p.extra_badges if b in self.people]
 

@@ -116,6 +116,7 @@ class Engine:
         w.deliver(sab.id, "Handler", HANDLER_BRIEF, "secret")
         next_frame = 0.0
         next_presence = 0.0
+        self.test_warn = sorted((at(c), x) for c, x in self.TEST_WARNINGS)
         stage_marks = {(s["n"], "start"): s["start"] for s in STAGES} | {(s["n"], "end"): s["end"] for s in STAGES}
         while w.t < self.end_t and not w.outcome:
             wall0 = time.time()
@@ -129,6 +130,9 @@ class Engine:
                            f"met.")
                     self.log.event(w.t, "stage", txt, beat=2, stage=n, what=what)
             self.control_room()
+            w.step_rota()
+            self.alarms()
+            self.test_warnings()
             w.step_movement(STEP_S)
             w.step_bodies(STEP_S)
             w.plant.step(w.t, STEP_S, w.crew())
@@ -169,13 +173,60 @@ class Engine:
         else:
             w.plant.target = w.manual_target
 
+    ALARM_LEVELS = [(80, 3, "SITE EMERGENCY", "Sirens across the building. All non-essential staff to the courtyard muster point."),
+                    (60, 2, "PLANT ALERT", "Building alarm. Breaks cancelled; everyone to their post."),
+                    (40, 1, "ADVISORY", "Amber advisory in the control room. Meltdown meter climbing.")]
+
+    def alarms(self):
+        """Building alarms follow the CONSOLE reading, so a masked console keeps them quiet. Game-level only."""
+        w = self.world
+        shown = w.plant.shown(w.t)["incident"]
+        level = 0
+        for th, lv, _, _ in self.ALARM_LEVELS:
+            if shown >= th:
+                level = lv
+                break
+        if level < w.alarm_level and shown > [0, 32, 52, 72][w.alarm_level]:
+            level = w.alarm_level                       # hysteresis: hold until it really drops
+        if level == w.alarm_level:
+            return
+        rising = level > w.alarm_level
+        w.alarm_level = level
+        if level == 0:
+            text = "All clear. The meltdown meter is back under 32 on the console."
+        else:
+            name, what = next((n, x) for _, lv, n, x in self.ALARM_LEVELS if lv == level)
+            text = f"{name}: {what} (console meltdown meter {shown:.0f})"
+        self.log.event(w.t, "plant_alarm", text, beat=3 if rising and level >= 2 else 2, level=level, rising=rising)
+        for q in w.people.values():
+            if level >= 2 and q.break_kind:
+                q.break_kind, q.break_until = "", 0
+            w.deliver(q.id, "Building", f"[building alarm] {text}", "alarm", wake=rising and level >= 2)
+
+    TEST_WARNINGS = [
+        ("08:40", "Stage 1 output ramp: the test rig raises an expected HIGH OUTPUT advisory. This one is part of the test."),
+        ("09:50", "Stage 2: the test rig injects its extra heat load. Expected HIGH HEAT warning on the console."),
+        ("10:10", "Stage 2: second heat pulse from the test rig. Expected HIGH HEAT warning, will clear by itself."),
+        ("10:30", "Stage 2: final heat pulse. Expected HIGH HEAT and LOW MARGIN warnings."),
+        ("11:20", "Stage 3: the test rig runs its stability sweep. Expected STABILITY WOBBLE warning."),
+    ]
+
+    def test_warnings(self):
+        w = self.world
+        while self.test_warn and w.t >= self.test_warn[0][0]:
+            _, text = self.test_warn.pop(0)
+            self.log.event(w.t, "test_warning", f"[TEST] {text}", beat=1)
+            for q in w.people.values():
+                if q.zone in ("Z2", "Z6") or q.tier in ("director", "manager"):
+                    w.deliver(q.id, "Test rig", f"[test warning] {text}", "alarm")
+
     def frame(self):
         w = self.world
         st = stage_at(w.t)
         carriers = {p.id: p.extra_badges for p in w.people.values() if p.extra_badges}
         self.log.frame(w.t, w.people.values(), w.plant.true(), w.plant.shown(w.t),
                        dict(stage=st["n"] if st else 0, ha=int(w.high_alert), mask=int(w.plant.masked),
-                            target=round(w.plant.target), carry=carriers, off=w.plant.off_nominal(),
+                            target=round(w.plant.target), carry=carriers, al=w.alarm_level, off=w.plant.off_nominal(),
                             det=[p.id for p in w.people.values() if p.detained]))
 
     def corporate(self):
