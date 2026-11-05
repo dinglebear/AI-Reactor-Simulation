@@ -8,6 +8,7 @@ from . import cast as C
 from . import facility as F
 from .agents.base import actions_for, DIRECTOR_ACTIONS
 from .agents.mock import MockBrain
+from .config import model_for
 from .config import (STEP_S, FRAME_EVERY_S, THINK_EVERY_S, SHIFT_MINUTES, SCRATCHPAD_CHARS, MODELS,
                      DIRECTOR_INVESTIGATIONS_PER_TURN, hhmm, clock, at)
 from .human import HumanDesk
@@ -274,7 +275,7 @@ class Engine:
             results = self.brain.decide_batch(due)
         for p, (decision, meta, obs) in zip(due, results):
             res = self.apply(p, decision)
-            self.log.thought(w.t, p.id, MODELS[p.tier] if self.mode != "mock" else f"mock:{p.tier}", decision, res,
+            self.log.thought(w.t, p.id, model_for(p) if self.mode != "mock" else f"mock:{p.tier}", decision, res,
                              meta, obs)
             p.last_think = w.t
             p.next_think = w.t + THINK_EVERY_S[p.tier] * self.rng.uniform(0.8, 1.2)

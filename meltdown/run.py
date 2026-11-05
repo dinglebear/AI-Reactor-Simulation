@@ -35,12 +35,16 @@ def main(argv=None):
     ap.add_argument("--concurrency", type=int, default=8, help="parallel API calls in live mode")
     ap.add_argument("--tempo", default="normal", choices=["normal", "fast", "max"],
                     help="how often agents think: fast = ~2x the turns per game minute, max = ~3x (for Max/API)")
+    ap.add_argument("--spy-model", default=None, help="model for the spy only, e.g. claude-opus-5-5")
     ap.add_argument("--out", default="runs", help="parent folder for run directories")
     ap.add_argument("--movie", action="store_true",
                     help="after the game, have Claude write the narrated movie (same mode as the game)")
     a = ap.parse_args(argv)
     from .config import set_tempo
     set_tempo(a.tempo)
+    if a.spy_model:
+        from . import config
+        config.SPY_MODEL = a.spy_model
     mode = "live" if a.live else "claude-code" if a.claude_code else "mock"
     human = a.human or ("auto" if mode == "mock" else "ask")
     speed = a.speed if a.speed is not None else (0.0 if mode == "mock" else 30.0)

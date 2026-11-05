@@ -4,6 +4,13 @@ MODELS = {
     "manager": "claude-sonnet-5-5",
     "staff": "claude-haiku-5-5",
 }
+SPY_MODEL = None   # e.g. "claude-opus-5-5" via --spy-model, to give the spy a stronger brain than the other managers
+
+
+def model_for(p) -> str:
+    return SPY_MODEL if (SPY_MODEL and getattr(p, "saboteur", False)) else MODELS[p.tier]
+
+
 EFFORT = {"director": "medium", "manager": "low", "staff": "low"}
 MAX_TOKENS = {"director": 4000, "manager": 3000, "staff": 1500}
 

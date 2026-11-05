@@ -61,7 +61,8 @@ class Person:
 
     @property
     def model(self):
-        return MODELS[self.tier]
+        from .config import model_for
+        return model_for(self)
 
     def holds(self):
         return ([self.badge] if self.badge else []) + list(self.extra_badges)

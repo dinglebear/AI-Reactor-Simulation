@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 
-from ..config import MODELS, EFFORT, MAX_TOKENS
+from ..config import model_for, MODELS, EFFORT, MAX_TOKENS
 from .base import system_prompt, shared_prompt, decision_schema, actions_for, observation
 from .mock import MockBrain
 
@@ -35,7 +35,7 @@ class LLMBrain:
         self.usage = {"input": 0, "output": 0, "cache_read": 0, "calls": 0, "fallback_to_mock": 0}
 
     async def _call(self, p, obs):
-        model = MODELS[p.tier]
+        model = model_for(p)
         schema = decision_schema(list(actions_for(p).keys()))
         kw = dict(
             model=model,

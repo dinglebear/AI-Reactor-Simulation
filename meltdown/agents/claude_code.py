@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import time
 
-from ..config import MODELS, EFFORT
+from ..config import model_for, MODELS, EFFORT
 from .base import system_prompt, shared_prompt, decision_schema, actions_for, observation
 from .mock import MockBrain
 
@@ -85,7 +85,7 @@ class ClaudeCodeBrain:
     # one turn ---------------------------------------------------------------------------------------------
     def command(self, p):
         schema = decision_schema(list(actions_for(p).keys()))
-        return [self.exe, "-p", "--model", MODELS[p.tier], "--effort", EFFORT[p.tier],
+        return [self.exe, "-p", "--model", model_for(p), "--effort", EFFORT[p.tier],
                 "--system-prompt", f"{self.shared}\n\n{system_prompt(self.w, p)}",
                 "--json-schema", json.dumps(schema), "--output-format", "json",
                 "--tools", "", "--strict-mcp-config", "--setting-sources", "project",
@@ -136,7 +136,7 @@ class ClaudeCodeBrain:
         self.usage["cache_read"] += u.get("cache_read_input_tokens") or 0
         self.usage["cache_write"] += u.get("cache_creation_input_tokens") or 0
         self.usage["api_equivalent_usd"] = round(self.usage["api_equivalent_usd"] + (res.get("total_cost_usd") or 0), 4)
-        return self._decision(res), dict(source="live", latency_ms=ms, reasoning_summary="", model=MODELS[p.tier],
+        return self._decision(res), dict(source="live", latency_ms=ms, reasoning_summary="", model=model_for(p),
                                          tokens=dict(i=u.get("input_tokens") or 0, o=u.get("output_tokens") or 0))
 
     async def _wait_for_reset(self, e):
