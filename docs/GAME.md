@@ -139,6 +139,34 @@ The spy was a manager for years and trained to read people, so their prompt has 
 person notices, wants and gives way on (by personality), the Director's and managers' pressure points, and a
 handful of the grudges and soft spots between coworkers. It is information, not a plan.
 
+## The Director's day
+
+The Director organises the certification test: she runs the schedule, watches every stage from the control room
+(the game counts the minutes she's there), and owes corporate a written `test_report` for each stage (at least
+300 characters; it ties her up for about 5 minutes). Her observation shows each stage's watched minutes and whether
+the report is filed.
+
+She is NOT told a spy exists. All she has is the CEO's 08:02 message: HR flagged weird encrypted traffic from a
+mid-level terminal; handle it quietly, don't spook anyone, don't stop the test.
+
+`lockdown on` stops all work (no system upkeep) and seals every door with a reader except for the Director and the
+Security manager. Turning it on needs a full page (600+ characters) of reasons, which goes straight to the CEO, who
+is furious. `lockdown off` lifts it.
+
+## Chores, following, and the janitor
+
+Everyone except the Director has ordinary chores for the day (log readings, walk down the buses, calibration
+checks, patrol rounds, cleaning). They're listed with a station and a due time, and `chore` does one while
+standing at its station (about 3 minutes). Nobody is made to do them; overdue ones just show as OVERDUE.
+
+Anyone can `follow` someone for up to 10 minutes: they keep going where that person goes and are told what the
+person is doing in each room. The person being followed may get the feeling someone is behind them.
+
+Earl Mabry, the custodian, is a 68-year-old Navy veteran with thirty years on site: hard-working, sharp, observant
+and willing to follow someone himself. The spy's dossier marks him as the real threat.
+
+Restrooms have radio now (still no cameras and no badge reader).
+
 ## Who knows about the spy
 
 Only the Director and the spy are told a spy may exist. The shared rules every agent reads describe a long, noisy

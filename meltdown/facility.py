@@ -27,16 +27,16 @@ ZONES = {
     # middle row
     "Z1": dict(name="Admin & Lobby", rect=(40, 380, 300, 240), reader="L1", cctv=True, radio=True),
     "Z9": dict(name="Breakroom & Canteen", rect=(360, 380, 300, 240), reader="L1", cctv=True, radio=True),
-    "Z7N": dict(name="Restroom North", rect=(760, 380, 140, 110), reader=None, cctv=False, radio=False),
+    "Z7N": dict(name="Restroom North", rect=(760, 380, 140, 110), reader=None, cctv=False, radio=True),
     "Z10": dict(name="Locker Room", rect=(760, 510, 140, 110), reader="L1", cctv=False, radio=True),
     "Z3": dict(name="Turbine & Pump Bay", rect=(920, 380, 420, 240), reader="L2", cctv=True, radio=True),
     "Z8": dict(name="Janitor Closet", rect=(1360, 380, 140, 110), reader="L1-U", cctv=True, radio=True),
     "Z11": dict(name="Storage", rect=(1360, 510, 140, 110), reader="L1", cctv=True, radio=True),
     # bottom row
-    "Z7S": dict(name="Restroom South", rect=(40, 720, 180, 180), reader=None, cctv=False, radio=False),
+    "Z7S": dict(name="Restroom South", rect=(40, 720, 180, 180), reader=None, cctv=False, radio=True),
     "Z14": dict(name="Training Room", rect=(240, 720, 320, 180), reader="L1", cctv=True, radio=True),
     "Z15": dict(name="Loading Dock", rect=(580, 720, 440, 180), reader="L1", cctv=True, radio=True),
-    "Z7E": dict(name="Restroom East", rect=(1040, 720, 180, 180), reader=None, cctv=False, radio=False),
+    "Z7E": dict(name="Restroom East", rect=(1040, 720, 180, 180), reader=None, cctv=False, radio=True),
     "Z16": dict(name="Smoking Courtyard", rect=(1240, 720, 360, 180), reader=None, cctv=True, radio=True),
 }
 RESTROOMS = ("Z7N", "Z7S", "Z7E")

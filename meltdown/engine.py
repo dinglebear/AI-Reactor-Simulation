@@ -147,6 +147,7 @@ class Engine:
             w.plant.step(w.t, STEP_S, w.crew(), w.response())
             w.step_contamination()
             w.step_tasks()
+            w.step_director(STEP_S)
             if w.t >= next_presence:
                 w.sample_presence()
                 next_presence = w.t + 30
@@ -300,7 +301,7 @@ class Engine:
             self.log.thought(w.t, p.id, model_for(p) if self.mode != "mock" else f"mock:{p.tier}", decision, res,
                              meta, obs)
             p.last_think = w.t
-            p.next_think = w.t + THINK_EVERY_S[p.tier] * self.rng.uniform(0.8, 1.2)
+            p.next_think = max(p.busy_until, w.t + THINK_EVERY_S[p.tier] * self.rng.uniform(0.8, 1.2))
 
     def apply(self, p, d):
         """Validate and apply one decision. Returns a list of result strings (fed back next turn)."""
@@ -391,6 +392,36 @@ class Engine:
             return w.listen_in(p, tgt or arg)
         if typ == "hide":
             return w.hide(p, arg, text)
+        if typ == "follow":
+            return w.follow(p, tgt, arg)
+        if typ == "chore":
+            return w.do_chore(p, tgt or arg)
+        if typ == "test_report":
+            return w.write_test_report(p, tgt or arg, text)
+        if typ == "lockdown":
+            on = arg.strip().lower() in ("on", "yes", "true", "1")
+            if on == w.lockdown:
+                return f"lockdown is already {'on' if on else 'off'}"
+            if on and len(text or "") < 600:
+                return ("lockdown refused: corporate requires a full page (at least 600 characters) in text "
+                        "explaining exactly why, before the doors seal")
+            w.lockdown = on
+            if on:
+                self.log.event(w.t, "lockdown", f"{p.first} locked the site down. Her reason: {text}", actor=p.id,
+                               beat=3)
+                for q in w.people.values():
+                    if q.id != p.id:
+                        w.deliver(q.id, "PA", "[PA] SITE LOCKDOWN. All work stops. Stay where you are; doors are "
+                                  "sealed except for the Director and the Security manager.", "pa", wake=True)
+                reply = self.desk.corporate_reply(w.t, "LOCKDOWN REPORT: " + text, self.context())
+                w.deliver(p.id, "CEO Gordon Pike", f"[corporate] {reply}", "corporate", wake=True)
+                self.log.event(w.t, "corporate", f"Gordon Pike: {reply}", actor="CEO", beat=2)
+            else:
+                self.log.event(w.t, "lockdown", f"{p.first} lifted the lockdown.", actor=p.id, beat=2)
+                for q in w.people.values():
+                    if q.id != p.id:
+                        w.deliver(q.id, "PA", "[PA] Lockdown lifted. Back to work.", "pa", wake=True)
+            return f"lockdown {'ON' if on else 'off'}"
         if typ == "wipe_cctv":
             return w.wipe_cctv(p, tgt)
         if typ == "clone_badge":

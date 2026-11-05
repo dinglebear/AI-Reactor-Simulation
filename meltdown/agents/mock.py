@@ -31,6 +31,7 @@ QUIRKS = {
     "Literal Robot": ["Reading logged. Reading logged. Reading logged.", "Deviation noted. Reporting deviation."],
     "Perfectionist": ["That number is 0.4 off. Why is it 0.4 off.", "I'll recheck it. Again."],
     "Brown-Noser": ["Maybe the Director will notice how hard I work.", "I could mention Gus's long breaks..."],
+    "Veteran Janitor": ["Floor's wet by the airlock. Somebody's been in and out.", "Funny who's walking where today."],
     "Spooky Mystic": ["The vault hums a different note today.", "Bad energy near the airlock. Mark my words."],
     "Quiet Quitter": ["Another glitch alarm. Ignoring it.", "Clock out is at noon. Probably."],
     "Manager": ["Keep the team moving.", "SitRep due."],

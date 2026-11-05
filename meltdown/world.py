@@ -55,6 +55,10 @@ class Person:
     listening: dict = field(default_factory=dict)  # channel -> until (eavesdropping on a channel that isn't yours)
     carrying: list = field(default_factory=list)   # small things picked up or taken (not badges)
     clones: list = field(default_factory=list)     # badge ids copied with the RFID copier (the owner keeps theirs)
+    chores: list = field(default_factory=list)     # [{name, station, due, done}]
+    chore_until: float = 0.0
+    following: dict | None = None                  # {who, until, seen}
+    busy_until: float = 0.0                        # e.g. the Director writing a test report
 
     @property
     def first(self):
@@ -102,6 +106,8 @@ class World:
                        home=st or "", xy=xy, zone=F.STATIONS[st]["zone"] if st else a["zone"], station=st,
                        badge=a["id"])
             p.bladder = self.rng.uniform(0, 55)
+            from .config import at as _at
+            p.chores = [dict(name=n, station=st, due=_at(d), done=None) for n, st, d in C.chores_for(a)]
             p.next_think = self.rng.uniform(5, 90)
             self.people[p.id] = p
         self.make_rota()
@@ -128,6 +134,9 @@ class World:
         self.stashes: list[dict] = []       # things people hid: zone, who, t, badges, items, found
         self.listen_log: list[dict] = []    # radio handset log: who tuned to which channel, when
         self.wipes: list[dict] = []         # deleted footage: the camera system's audit trail
+        self.lockdown = False
+        self.test_reports: dict[int, dict] = {}
+        self.watched: dict[int, float] = {}  # stage -> seconds the Director spent in the control room during it
         # the spy's contraband: an RFID badge copier, hidden in the Locker Room (no cameras) before the shift
         self.stashes.append(dict(id="S0", zone=self.COPIER_ZONE, who=self.saboteur_id, t=-86400, badges=[],
                                  clones=[], items=[self.COPIER], found=False))
@@ -157,7 +166,7 @@ class World:
     def wake(self, pid, delay=0):
         from .config import MIN_GAP_S
         p = self.people[pid]
-        p.next_think = min(p.next_think, max(self.t + delay, p.last_think + MIN_GAP_S))
+        p.next_think = min(p.next_think, max(self.t + delay, p.last_think + MIN_GAP_S, p.busy_until))
 
     # ------------------------------------------------------------------ movement
     # ------------------------------------------------------------------ break rota
@@ -256,6 +265,13 @@ class World:
         """Walk through a door into `zone`, swiping if it has a reader. Returns False if refused."""
         reader = F.ZONES[zone]["reader"]
         prev = p.zone
+        if reader and self.lockdown and p.id not in self.LOCK_KEYS:
+            self.ev("door_denied", f"{p.first} is stuck at the {F.ZONES[zone]['name']} door: site lockdown",
+                    actor=p.id, zone=zone)
+            self.deliver(p.id, "Door", f"LOCKDOWN: the {F.ZONES[zone]['name']} door won't open. Only the Director "
+                         "and the Security manager can open doors.", "see", wake=True)
+            p.waypoints, p.dest, p.activity = [], None, "waiting"
+            return False
         if reader:
             badges = p.holds()
             if not badges:
@@ -460,8 +476,12 @@ class World:
             if p.zone in self.contaminated and not p.detained and not p.exposed:
                 p.exposed = True
 
+    LOCK_KEYS = ("U4-DIR", "U4-MGR-SF")
+
     def crew(self):
         out = {}
+        if self.lockdown:          # all work stops
+            return out
         for p in self.people.values():
             if p.activity == "working" and p.station in F.SETTINGS and p.station == p.home and not p.detained:
                 self.station_login[p.station] = (p.id, self.t)
@@ -491,6 +511,7 @@ class World:
                 self.tasks.pop(pid)
                 self.finish_task(p, task)
         self.step_searches()
+        self.step_follow()
         for due, who, payload in list(self.pending_results):
             if self.t >= due:
                 self.pending_results.remove((due, who, payload))
@@ -1041,6 +1062,96 @@ class World:
                 self._listen_noticed(q, key, chance=0.12)
         self.radio_log.append(dict(t=self.t, frm=p.id, dept=p.dept, channel=channel, text=text))
         self.log.speech(self.t, p.id, channel, text, to=to, zone=p.zone)
+
+    # ------------------------------------------------------------------ chores, following, the Director's paperwork
+    CHORE_S = 180
+
+    def do_chore(self, p: Person, name: str):
+        todo = [c for c in p.chores if not c["done"]]
+        if not todo:
+            return "all your chores are done"
+        low = (name or "").lower().strip()
+        c = next((c for c in todo if low and (low in c["name"].lower() or c["name"].lower() in low)), None) or \
+            next((c for c in todo if c["station"] == p.station), None)
+        if not c:
+            return "chore needs one of: " + ", ".join(c["name"] for c in todo)
+        if p.station != c["station"]:
+            return f"'{c['name']}' is done at {c['station']}; move there first"
+        if self.lockdown:
+            return "the site is in lockdown; all work has stopped"
+        c["done"] = self.t
+        p.chore_until = self.t + self.CHORE_S
+        self.ev("chore", f"{p.first}: {c['name']}", actor=p.id, zone=p.zone, public=True, beat=0)
+        return f"doing '{c['name']}' (about {self.CHORE_S // 60} minutes)"
+
+    FOLLOW_S = 600
+
+    def follow(self, p: Person, target: str, arg: str = ""):
+        if (arg or "").lower().startswith("stop") or (target or "").lower() == "stop":
+            p.following = None
+            return "stopped following"
+        t = self.people.get(target or "")
+        if not t or t.id == p.id or t.detained:
+            return "follow needs a person id"
+        p.following = dict(who=t.id, until=self.t + self.FOLLOW_S, seen=None, next=0)
+        self.ev("follow", f"{p.first} started following {t.first}", actor=p.id, zone=p.zone, public=False, beat=2,
+                target=t.id)
+        return f"following {t.first} for up to {self.FOLLOW_S // 60} minutes"
+
+    def step_follow(self):
+        for p in self.people.values():
+            f = p.following
+            if not f or p.detained:
+                continue
+            t = self.people[f["who"]]
+            if self.t > f["until"] or t.detained:
+                p.following = None
+                self.deliver(p.id, "eyes", f"You stop following {t.first}.", "see", wake=True)
+                continue
+            if p.zone == t.zone:
+                if f["seen"] != t.zone:
+                    f["seen"] = t.zone
+                    doing = (f"at the {F.STATIONS[t.station]['label']}" if t.station else t.activity)
+                    self.deliver(p.id, "eyes", f"You followed {t.first} into the {F.ZONES[t.zone]['name']}: they are "
+                                 f"{doing}.", "see", wake=True)
+                    if t.activity != "restroom" and self.rng.random() < self.NOTICE_P.get(t.group, 0.5) * 0.3:
+                        self.deliver(t.id, "eyes", f"You get the feeling {p.first} has been behind you for a while.",
+                                     "see", wake=True)
+                        self.ev("follow_noticed", f"{t.first} noticed {p.first} following", actor=t.id,
+                                zone=t.zone, beat=2, target=p.id)
+                continue
+            if self.t >= f["next"]:
+                f["next"] = self.t + 20
+                spot = t.dest or t.station or self.spot_in(t.zone)
+                if spot and p.dest != spot:
+                    r = self.send(p, spot, "walk")
+                    if r == "no route":
+                        p.following = None
+                        self.deliver(p.id, "eyes", f"You lose {t.first} at a door your badge can't open.", "see",
+                                     wake=True)
+
+    def step_director(self, dt):
+        s = stage_at(self.t)
+        if s and self.director.zone == "Z2" and not self.director.detained:
+            self.watched[s["n"]] = self.watched.get(s["n"], 0) + dt
+
+    def write_test_report(self, p: Person, stage: str, text: str):
+        try:
+            n = int(str(stage).strip().lstrip("Ss").split()[-1])
+        except (ValueError, IndexError):
+            return "test_report needs the stage number in target"
+        st = next((x for x in STAGES if x["n"] == n), None)
+        if not st:
+            return "no such stage"
+        if self.t < st["start"]:
+            return f"Stage {n} hasn't started yet"
+        if len(text or "") < 300:
+            return "a test report needs at least 300 characters: what you watched, what went wrong, what went right"
+        self.test_reports[n] = dict(t=self.t, text=text, watched_min=round(self.watched.get(n, 0) / 60))
+        p.busy_until = self.t + 300
+        self.ev("test_report", f"{p.first} filed the Stage {n} report: {text[:300]}", actor=p.id, zone=p.zone, beat=1,
+                stage=n)
+        return f"Stage {n} report filed; writing it ties you up for about 5 minutes"
 
     # ------------------------------------------------------------------ eavesdropping and hiding
     LISTEN_S = 600

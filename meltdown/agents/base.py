@@ -18,7 +18,7 @@ STAFF_ACTIONS = {
     "interact": "change a station's setting. target = station, arg = setting. You must be standing at that station. "
                 "If someone else is working at it, they stop you and raise the alarm.",
     "work": "stay at your current station and keep its system healthy",
-    "restroom": "go to the nearest restroom (no cameras, no radio, whispers only)",
+    "restroom": "go to the nearest restroom (no cameras; whisper for privacy, radios still work)",
     "wait": "do nothing this turn",
     "lend_badge": "answer a badge request. arg = yes or no",
     "answer": "answer the Director in an interview (you must be at the Director's desk). arg = tell or withhold; "
@@ -33,6 +33,10 @@ STAFF_ACTIONS.update({
             "in text. Cameras and people in the room may see you do it. Not while moving.",
     "retrieve": "take back what you hid in this room",
     "rummage": "look around this room for anything someone hid",
+    "follow": "quietly follow someone for up to 10 minutes: you keep going where they go and see what they do. "
+              "target = person id ('stop' in arg to stop). They may notice you behind them.",
+    "chore": "do one of today's chores (listed in your observation). You must be at its station; it takes a few "
+             "minutes. target = the chore's name",
 })
 MANAGER_ACTIONS = dict(STAFF_ACTIONS, order="send one of your staff somewhere. target = person id, arg = station name")
 SECURITY_MANAGER_EXTRA = {
@@ -75,8 +79,14 @@ DIRECTOR_ACTIONS = {
               "swipe) within a minute and a guard goes to check their pockets. target = zone id: a guard sweeps "
               "that room for hidden things. arg = a guard's id (optional). The call goes out on the security "
               "channel, so anyone on it hears who is wanted.",
-    "accuse": "arrest someone as the saboteur. target = person id, text = your case. Justified only with two "
+    "accuse": "arrest someone you believe is working against the plant. target = person id, text = your case. Justified only with two "
               "different clue types pointing at them. Two wrong arrests and you lose.",
+    "lockdown": "lock the site down (arg on/off). All work stops and only you and the Security manager can open "
+                "doors. Corporate will be furious: turning it ON requires text = a full page (at least 600 "
+                "characters) explaining exactly why, which goes straight to the CEO.",
+    "test_report": "write up a test stage for corporate: what you watched, what went wrong and what went right. "
+                   "target = stage number, text = the report (at least 300 characters). Writing it ties you up "
+                   "for about 5 minutes.",
     "scram": "shut the unit down. Ends the game; the test fails. Corporate only forgives it if the danger was real.",
     "message_corporate": "send a message to CEO Gordon Pike. text = message. The game pauses until he replies.",
     "order": "send anyone somewhere. target = person id, arg = station name",
@@ -171,8 +181,8 @@ Corridor, Center Stairwell, East Link), which have cameras except the stairwell 
 Badges: levels go L1 < L2 < L3 < L4, and a reader opens for its level or higher, with exceptions: the Janitor
 Closet (L1-U) opens only for custodians and L4, and the Central Alarm Station (SEC) only for security badges (ending -SEC) and L4.
 Custodians' L1-U badges also open the Master Control Room and the Turbine & Pump Bay. The cast list shows everyone's
-badge. Every door with a reader logs a swipe, and a refused swipe alerts security. The three restrooms have no reader, no cameras and no radio: only
-whispers work. The Locker Room has no cameras either.
+badge. Every door with a reader logs a swipe, and a refused swipe alerts security. The three restrooms have no reader and no cameras; radios work, and a whisper
+stays private. The Locker Room has no cameras either.
 You get restroom urges over time; ignore them too long and you will have to go anyway.
 
 THE BONUS: corporate has promised every employee a cash bonus if Unit 4 passes all three stages today, and talk of
@@ -201,11 +211,12 @@ def test_alarm_schedule():
     return "\n".join(f"- {c}: {alarm}" for c, alarm, _ in Engine.TEST_WARNINGS)
 
 
-DIRECTOR_SECRET = ("ONLY YOU KNOW THIS (the crew does not): one of the four department managers may be secretly "
-                   "working for a rival company, a saboteur. Their moves leave clues (badge ledger, cameras, station "
-                   "logs, witness testimony, radio). You win by arresting the saboteur with two different types of "
-                   "clue; two wrong arrests and you lose. The staff and managers think today is just a test day. "
-                   "Whether, when and whom you tell is your call.\n"
+DIRECTOR_SECRET = ("YOUR DAY: you organise the certification test. You run the schedule, you watch every stage, and "
+                   "after each stage corporate expects your written test report (problems and successes). That "
+                   "takes real time out of your day.\n"
+                   "Corporate may pass you sensitive news privately; the crew knows only what you tell them. "
+                   "If you ever arrest someone, it holds up only with two different types of evidence pointing at "
+                   "them; two wrong arrests and corporate takes you off the floor.\n"
                    "Weigh every report by its source: some people here make things up for fun, some panic at "
                    "everything, some only say what you want to hear.\n"
                    "THE TEST RIG will set off these planned alarms (the crew hears them as ordinary alarms, unless "
@@ -237,7 +248,7 @@ def system_prompt(world, p) -> str:
         me += ("WHAT YOU THINK OF PEOPLE (your starting view; change your mind if they surprise you):\n"
                + "\n".join(f"- {world.people[o].first} ({o}): {txt}" for o, (_, txt) in ops.items()) + "\n")
     if p.tier == "director":
-        goal = ("GOAL: pass the certification test, keep MELTDOWN below 100, and arrest the saboteur with evidence. "
+        goal = ("GOAL: pass the certification test and keep MELTDOWN below 100. "
                 f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
                 "wants the pass; you want a plant that's still standing.\n" + DIRECTOR_SECRET + test_alarm_schedule())
     elif p.saboteur:
@@ -351,6 +362,28 @@ def observation(world, p) -> str:
             lines.append("PENDING: someone asked to borrow your badge. Use lend_badge with yes or no.")
         elif p.pending["kind"] == "interview":
             lines.append("PENDING: the Director summoned you for an interview. Go to director_desk (Z2) and use answer.")
+    if world.lockdown:
+        lines.append("SITE LOCKDOWN: all work has stopped and doors only open for the Director and the Security manager.")
+    if p.chores:
+        lines.append("Your chores today: " + "; ".join(
+            f"{c['name']} at {c['station']} by {hhmm(c['due'])}" + (" (done)" if c["done"] else
+                                                                   " (OVERDUE)" if world.t > c["due"] else "")
+            for c in p.chores))
+    if p.following:
+        lines.append(f"You are following {world.people[p.following['who']].first}.")
+    if p.tier == "director":
+        from ..plant import STAGES as _ST, stage_at as _sa
+        cur = _sa(world.t)
+        rows = []
+        for s_ in _ST:
+            if world.t < s_["start"]:
+                continue
+            w_min = round(world.watched.get(s_["n"], 0) / 60)
+            filed = world.test_reports.get(s_["n"])
+            rows.append(f"Stage {s_['n']}: watched {w_min} min from the control room, report "
+                        + ("filed" if filed else "running" if cur and cur["n"] == s_["n"] else "NOT FILED"))
+        if rows:
+            lines.append("YOUR TEST DUTIES: " + "; ".join(rows) + ".")
     if p.order:
         lines.append(f"Your latest order: go to {p.order}.")
     if p.break_kind:

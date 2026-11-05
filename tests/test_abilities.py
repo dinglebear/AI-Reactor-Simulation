@@ -176,3 +176,49 @@ class CamerasAndWipes(unittest.TestCase):
         self.w.director.station = "director_desk"
         self.w.director.activity = "working"
         self.assertIn("someone else", self.w.wipe_cctv(spy, "Z3"))
+
+
+class DirectorDayAndCrew(unittest.TestCase):
+    def setUp(self):
+        self.eng = Engine(seed=9, mode="mock", run_dir="runs/test-day", human="auto", speed=0.0, quiet=True,
+                          minutes=5, saboteur="HY")
+        self.w = self.eng.world
+        self.d = self.w.director
+
+    def test_lockdown_needs_a_page_seals_doors_and_stops_work(self):
+        w, d = self.w, self.d
+        self.assertIn("refused", self.eng.do(d, "lockdown", "", "on", "short", "walk"))
+        self.assertIn("ON", self.eng.do(d, "lockdown", "", "on", "x" * 650, "walk"))
+        self.assertEqual(w.crew(), {})
+        staff = w.people["U4-OP-01"]
+        self.assertFalse(w.cross(staff, "Z3"))
+        ruth = w.people["U4-MGR-SF"]
+        self.assertTrue(w.cross(ruth, "Z3"))
+        self.assertTrue(any(m["channel"] == "corporate" for m in d.inbox))
+        self.eng.do(d, "lockdown", "", "off", "", "walk")
+        self.assertFalse(w.lockdown)
+
+    def test_test_report_takes_time(self):
+        from meltdown.config import at
+        w, d = self.w, self.d
+        w.t = at("09:20")
+        self.assertIn("300", w.write_test_report(d, "1", "too short"))
+        self.assertIn("filed", w.write_test_report(d, "1", "y" * 320))
+        self.assertGreaterEqual(d.busy_until, w.t + 300)
+
+    def test_chores_and_follow(self):
+        w = self.w
+        earl = w.people["U4-FC-01"]
+        self.assertIn("Veteran", earl.archetype)
+        op = w.people["U4-OP-02"]
+        op.station, op.zone = "control_console", "Z2"
+        self.assertIn("doing", w.do_chore(op, "log the readings"))
+        self.assertTrue(op.chores[0]["done"] is not None)
+        self.assertIn("following", w.follow(earl, op.id))
+        earl.zone = op.zone
+        w.step_follow()
+        self.assertTrue(any("You followed" in m["text"] for m in earl.inbox))
+
+    def test_spy_sees_earl_as_a_threat(self):
+        from meltdown.agents.base import system_prompt
+        self.assertIn("Earl Mabry: the real threat", system_prompt(self.w, self.w.people["U4-MGR-HY"]))

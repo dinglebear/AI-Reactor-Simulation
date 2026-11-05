@@ -49,4 +49,6 @@ class HumanDesk:
     def corporate_reply(self, t, director_text, context):
         return self._ask(t, "corporate", "The Director is waiting on corporate (you are CEO Gordon Pike)",
                          context, f"Director Hart wrote: \"{director_text}\"\n  Your reply as Gordon Pike:",
-                         "Do what you have to, Simone, but I want that certificate on my desk by noon.")
+                         "LOCKDOWN? Simone, do you have any idea what this costs us? Do what you have to, but if "
+                         "this turns out to be nothing, it's your name on it." if director_text.startswith("LOCKDOWN")
+                         else "Do what you have to, Simone, but I want that certificate on my desk by noon.")

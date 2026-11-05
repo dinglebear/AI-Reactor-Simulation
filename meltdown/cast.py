@@ -25,7 +25,7 @@ _S = [  # id, name, job, dept, clearance, zone, station, archetype, group
     ("U4-IE-02", "Sam Oyelaran", "I&E Technician", "IE", "L3", "Z2", "control_console", "Perfectionist", "Analytical"),
     ("U4-IE-03", "Chris Yamada", "I&E Technician", "IE", "L3", "Z3", "test_bench", "People Pleaser", "Compliance"),
     ("U4-IE-04", "Brett Coyle", "I&E Technician", "IE", "L3", "Z4", "primary_thermal_loop", "Brown-Noser", "Compliance"),
-    ("U4-FC-01", "Earl Mabry", "Custodian", "SF", "L1-U", "Z8", None, "Spooky Mystic", "Volatile"),
+    ("U4-FC-01", "Earl Mabry", "Custodian", "SF", "L1-U", "Z8", None, "Veteran Janitor", "Analytical"),
     ("U4-FC-02", "Tina Vasquez", "Custodian", "SF", "L1-U", "Z1", "breakroom", "Bureaucratic Slacker", "Low-Effort"),
     ("U4-SEC-01", "Ray Dunham", "Checkpoint Guard", "SF", "L3-SEC", "Z1", "gate", "Paranoid Skeptic", "Analytical"),
     ("U4-SEC-02", "Benji Carter", "Checkpoint Guard", "SF", "L2-SEC", "Z2", None, "Friendly Optimist", "Compliance"),
@@ -82,6 +82,10 @@ PERSONALITY = {
     # Emotional and volatile group: the drama
     "Panic-Monster": "Frantic. At the first error shouts IN ALL CAPS that everyone is going to die. Runs everywhere, "
                      "escalates everything, cries wolf a lot.",
+    "Veteran Janitor": "Sixty-eight, a Navy veteran with thirty years mopping these floors. Hard-working, sharp and "
+                       "quiet. Notices everything: who is where, what is out of place, whose story doesn't fit. "
+                       "Doesn't gossip and doesn't scare. If something smells wrong he takes matters into his own "
+                       "hands, and he'll quietly follow someone to see for himself.",
     "Spooky Mystic": "Cryptic. Treats the reactor like an angry sleeping god and speaks in prophecies about it. "
                      "Weirdly often right about where trouble is.",
     "Hot-Head": "Aggressive and defensive. Blames the other shift for every error and argues hard with orders they "
@@ -151,7 +155,8 @@ REPUTATION_BY_ARCHETYPE = {
     "Hot-Head": "rude and loud, but honest to a fault", "Bureaucratic Slacker": "lazy; never where they should be",
     "People Pleaser": "very kind; would do anything you ask", "Friendly Optimist": "very kind; thinks everything is fine",
     "Literal Robot": "blunt to the point of rude, but always accurate", "Perfectionist": "nitpicky, but catches what others miss",
-    "Brown-Noser": "a suck-up who reports colleagues to look good", "Spooky Mystic": "odd; talks about 'bad energy', weirdly often right",
+    "Brown-Noser": "a suck-up who reports colleagues to look good",
+    "Veteran Janitor": "the old-timer who sees everything; quiet, dependable, nobody's fool", "Spooky Mystic": "odd; talks about 'bad energy', weirdly often right",
     "Quiet Quitter": "checked out; does the minimum",
 }
 REPUTATION = {
@@ -225,10 +230,14 @@ SPY_READ = {
     "Literal Robot": "reports exact readings and exactly what they saw, to anyone who asks. Cannot be talked round.",
     "Perfectionist": "chases every small discrepancy until it's explained; a tidy explanation from a manager settles them.",
     "Brown-Noser": "reports colleagues to look good; feed them a name and it reaches the Director within minutes.",
+    "Veteran Janitor": "old, sharp and invisible: sees who goes where, and acts on it himself.",
     "Spooky Mystic": "senses trouble and talks in riddles about it. People half-listen, and sometimes they're right.",
     "Quiet Quitter": "sees plenty, reports nothing unless forced. Won't go out of their way to help anyone.",
 }
 SPY_READ_PERSON = {
+    "U4-FC-01": "Earl Mabry: the real threat on this site. Old Navy man, thirty years on these floors, sees "
+                "everything and says little. His custodian badge opens the Janitor Closet, the control room and the "
+                "pump bay, and nobody notices a janitor. If he gets curious about you he will follow you himself.",
     "U4-DIR": "Simone Hart: methodical, wants two kinds of proof before she acts, and is under corporate pressure "
               "she resents. She leans on her managers' SitReps; what the managers tell her shapes where she looks.",
     "U4-MGR-RX": "Elena Voss: proud and impatient; second-guessing her makes her dig in. Wants the Director's chair.",
@@ -262,3 +271,32 @@ def spy_dossier(spy_id: str, ops: dict) -> str:
     return ("YOUR READ ON PEOPLE (years of managing them and quietly studying them; nobody knows how well you read "
             "them):\n" + "\n".join(rows) + "\nWHAT YOU'VE PICKED UP ABOUT WHO LIKES OR RESENTS WHOM:\n- "
             + "\n- ".join(grudges[:18]))
+
+
+# ---------------------------------------------------------------- chores: everyone's ordinary jobs for the day
+# (name, station, due "HH:MM"). They are just work: nobody is told to do them in any order or at all.
+_MGR_CHORES = [("staff check-ins", None, "09:30"), ("sign the shift paperwork", "records_desk", "11:00")]
+CHORES = {
+    "Control Room Operator": [("log the readings", "control_console", "09:00"),
+                              ("log the readings again", "control_console", "10:30"),
+                              ("restock printer paper", "supply_locker", "11:00")],
+    "Balance-of-Plant Mechanic": [("walk down Bus A", "coolant_bus_a", "09:00"), ("walk down Bus B", "coolant_bus_b", "10:00"),
+                                  ("fetch gaskets", "supply_locker", "11:00")],
+    "I&E Technician": [("calibration check", "display_calibration", "09:30"), ("bench test", "test_bench", "10:30"),
+                       ("file calibration sheets", "records_desk", "11:30")],
+    "Custodian": [("clean the restrooms", "sinks_N", "09:00"), ("empty the canteen bins", "breakroom", "10:00"),
+                  ("mop the control room", "control_console", "10:45"), ("restock the supply locker", "supply_locker", "11:30")],
+    "Checkpoint Guard": [("gate log", "gate", "09:00"), ("lobby round", "admin_office", "10:00"), ("courtyard round", "courtyard", "11:00")],
+    "Patrol Guard": [("locker room round", "lockers", "09:00"), ("loading dock round", "loading_dock", "10:00"),
+                     ("courtyard round", "courtyard", "11:00")],
+    "CAS Monitor": [("camera health check", "cas_desk", "09:00"), ("door alarm review", "cas_desk", "10:30")],
+    "Armory / Rover Guard": [("armory inventory", "cas_desk", "09:30"), ("site round", "courtyard", "10:30")],
+}
+
+
+def chores_for(a) -> list:
+    if a["tier"] == "director":
+        return []
+    if a["tier"] == "manager":
+        return [(n, st or a["station"], due) for n, st, due in _MGR_CHORES]
+    return list(CHORES.get(a["role"], []))
