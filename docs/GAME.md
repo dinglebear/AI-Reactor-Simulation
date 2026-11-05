@@ -101,6 +101,20 @@ The mock Director interviews the main suspect before an arrest, which is often w
 `accuse` detains someone. It is **justified** with two different clue types pointing at them. Arresting the
 saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if MELTDOWN was really ≥ 60.
 
+## Who knows about the spy
+
+Only the Director and the spy are told a spy may exist. The shared rules every agent reads describe a long, noisy
+test day and nothing more; managers and staff only learn of a spy if someone tells them (the Director, a rumour, an
+arrest). The CEO's HR tip goes to the Director alone.
+
+## Rumours and reputations
+
+The rules tell everyone that people gossip, and that a rumour is worth what its source is worth. The Chaos
+Prankster is encouraged to make up rumours of their own. Reputations ("funny, but you can't believe half of what
+they say", "cries wolf") are in other people's opinion lists, so a report from a known fibber or a panicker may be
+taken with a grain of salt, even on the day it's true. Nothing in the engine forces anyone to believe, spread or
+dismiss a rumour.
+
 ## People: motives, opinions and the bonus
 
 Corporate has promised everyone a cash bonus if Unit 4 passes all three stages, and a SCRAM or failed stage means
@@ -162,9 +176,10 @@ spread people out and give slackers, patrols and secret conversations somewhere 
   (the building tells all staff to go to response stations; nobody is moved automatically), site emergency at 70 (sirens; staff without a response post
   muster in the courtyard). Because they read the console, a masked console keeps them quiet. These are game thresholds, not a
   model of a real alarm system.
-- **Test warnings.** At set times the test rig raises expected warnings (high output, heat pulses, a stability
-  sweep). They are labelled as part of the test, but they land on the same desks as real trouble, which gives the
-  spy cover and the Director something to second-guess.
+- **Test alarms.** At set times the test rig sets off alarms on purpose (high output, heat pulses, a stability
+  sweep). Staff hear them as ordinary building alarms. Managers know the test plan, and the Director has the exact
+  schedule and a site PA (`pa` channel, Director only, heard everywhere including restrooms). Whether the floor is
+  warned is the Director's call, and real trouble can hide behind a test alarm.
 
 ## The crisis
 

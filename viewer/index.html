@@ -100,6 +100,16 @@ button.spy.on { border-color: var(--danger); color: var(--danger); }
 .caption .secret { color: var(--danger); font: 600 10px var(--mono); letter-spacing: .1em; }
 .caption.note { border-color: var(--talk); }
 .caption.note h3 { color: var(--talk); }
+.movie-bars::before, .movie-bars::after { content: ""; position: absolute; left: 0; right: 0; height: 9%; background: #000; z-index: 5; pointer-events: none; }
+.movie-bars::before { top: 0; } .movie-bars::after { bottom: 0; }
+.subtitle { position: absolute; left: 50%; bottom: calc(9% + 18px); transform: translateX(-50%); width: min(760px, calc(100% - 32px)); z-index: 6; text-align: center; pointer-events: none; }
+.subtitle .who { display: inline-flex; align-items: center; gap: 8px; font: 600 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--phosphor); margin-bottom: 6px; }
+.subtitle .who .av { width: 22px; height: 22px; font-size: 10px; }
+.subtitle p { margin: 0; font-size: clamp(16px, 2.2vw, 22px); line-height: 1.4; color: #fff; text-shadow: 0 2px 6px #000, 0 0 2px #000; text-wrap: balance; }
+.subtitle.narration p { font-family: var(--display); letter-spacing: .02em; }
+.subtitle.thought p, .subtitle.secret p { font-style: italic; color: #d7dde2; }
+.subtitle.secret .who { color: var(--danger); }
+.scene-tag { position: absolute; top: calc(9% + 12px); left: 50%; transform: translateX(-50%); white-space: nowrap; z-index: 6; font: 600 11px var(--mono); letter-spacing: .2em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 4px #000; }
 .titlecard { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, #0b1014d9 0%, #0b1014f5 70%); z-index: 4; text-align: center; padding: 24px; }
 .titlecard .kicker { font: 600 12px var(--mono); letter-spacing: .3em; color: var(--phosphor); text-transform: uppercase; }
 .titlecard h2 { font: 700 clamp(28px, 5vw, 64px)/1.05 var(--display); letter-spacing: .06em; margin: 10px 0; text-transform: uppercase; text-wrap: balance; }
@@ -348,7 +358,7 @@ function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
       return html`<g key=${"b" + e.t + e.actor} opacity=${Math.min(1, 1.6 - (t - e.t) / 15)} pointer-events="none">
         <rect x=${bx} y=${by} width=${wdt} height=${hgt} rx=${6 * s} fill="#0b1014ee" stroke=${col}></rect>
         <path d=${`M${a.x - 5 * s} ${by + hgt} L${a.x} ${by + hgt + 7 * s} L${a.x + 5 * s} ${by + hgt}`} fill="#0b1014" stroke=${col}></path>
-        <text x=${a.x} y=${by + hgt / 2 + fs * .35} text-anchor="middle" font-size=${fs} fill="var(--fg)" font-style=${whisper ? "italic" : "normal"}>${e.channel === "radio" || e.channel === "exec" ? "📻 " : ""}${txt}</text></g>`; })}
+        <text x=${a.x} y=${by + hgt / 2 + fs * .35} text-anchor="middle" font-size=${fs} fill="var(--fg)" font-style=${whisper ? "italic" : "normal"}>${e.channel === "pa" ? "📢 " : e.channel === "radio" || e.channel === "exec" ? "📻 " : ""}${txt}</text></g>`; })}
   </svg>`;
 }
 
@@ -474,6 +484,76 @@ function RoomCard({ D, t, zone, truth, onClose }) {
 /* ---------------------------------------------------------------- app */
 function normalize(x) { return !x ? [] : Array.isArray(x) ? x : [x]; }
 
+// ---------------------------------------------------------------- the movie: narrated scenes read aloud
+const hashOf = (s) => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+// macOS/Windows ship joke and very old robotic voices; never use them
+const NOVELTY = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|junior|organ|pipe organ|ralph|superstar|trinoids|whisper|wobble|zarvox|fred|kathy|princess|agnes|bruce|vicki|victoria|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
+function voiceScore(v) { const n = v.name;
+  return (/premium/i.test(n) ? 50 : 0) + (/enhanced/i.test(n) ? 40 : 0) + (/natural|neural|online/i.test(n) ? 35 : 0) + (/siri/i.test(n) ? 30 : 0)
+    + (/google/i.test(n) ? 20 : 0) + (/^(samantha|daniel|karen|moira|tessa|rishi|alex|ava|evan|nathan|serena|tom|allison|susan|zoe|lee|oliver|arthur|martha|catherine|gordon|aaron|nicky)\b/i.test(n) ? 15 : 0)
+    + (/^en[-_](us|gb)/i.test(v.lang) ? 5 : 0); }
+function useVoices() {
+  const [voices, setVoices] = useState([]);
+  useEffect(() => { const ss = window.speechSynthesis; if (!ss) return;
+    const load = () => { const all = ss.getVoices().filter(v => !NOVELTY.test(v.name));
+      const en = all.filter(v => /^en/i.test(v.lang)); const pool = (en.length ? en : all).sort((a, b) => voiceScore(b) - voiceScore(a));
+      setVoices(pool.slice(0, 18)); };
+    load(); ss.addEventListener?.("voiceschanged", load); return () => ss.removeEventListener?.("voiceschanged", load); }, []);
+  return voices;
+}
+// small, natural-sounding nudges only: big pitch shifts are what make voices sound robotic or sing-song
+const ARCH_VOICE = { "Panic-Monster": [1.15, 1.04], "Weary Veteran": [0.92, 0.95], "Spooky Mystic": [0.88, 0.96], "Literal Robot": [1.0, 0.97],
+  "Hot-Head": [1.1, 1.0], "Quiet Quitter": [0.92, 0.98], "Friendly Optimist": [1.05, 1.04], "Daydreamer": [0.94, 1.03] };
+function voiceFor(voices, D, line) {
+  if (!voices.length) return null;
+  const narr = voices.find(v => /daniel|arthur|oliver|evan|nathan|aaron|tom|alex|uk english male|guy|ryan|george/i.test(v.name)) || voices[0];
+  if (line.who === "narrator") return { voice: narr, rate: 0.95, pitch: 1, volume: 1 };
+  const others = voices.filter(v => v !== narr);
+  const hidden = others[0] || narr;                        // the spy's thoughts get a voice nobody else uses
+  const pool = others.length > 2 ? others.slice(1) : others.length ? others : voices;
+  const h = hashOf(line.who); const c = D.castById[line.who] || {};
+  const [ar, ap] = ARCH_VOICE[c.archetype] || [1, 1];
+  let v = { voice: pool[h % pool.length], rate: ar * (0.96 + (h >> 3) % 5 * 0.03), pitch: ap * (0.94 + (h >> 6) % 5 * 0.03), volume: 1 };
+  if (line.kind === "thought") v = { ...v, rate: v.rate * 0.94, volume: 0.8 };
+  if (line.kind === "secret") v = { voice: hidden, rate: 0.88, pitch: 0.92, volume: 0.85 };
+  return v;
+}
+function speak(voices, D, line, on) {
+  const ss = window.speechSynthesis;
+  const est = 900 + line.text.length * 62;
+  if (!on || !ss || !voices.length) return new Promise(r => setTimeout(r, est)).then(() => ({ cancel() {} }));
+  const v = voiceFor(voices, D, line);
+  const parts = line.text.replace(/\s+/g, " ").match(/[^.!?]+[.!?]*["')\]]*\s*/g) || [line.text];
+  let cancelled = false;
+  const p = new Promise((resolve) => {
+    const guard = setTimeout(resolve, est * 2.5 + 4000);
+    parts.forEach((txt, i) => { const u = new SpeechSynthesisUtterance(txt.trim());
+      Object.assign(u, { voice: v.voice, rate: v.rate, pitch: v.pitch, volume: v.volume });
+      if (i === parts.length - 1) { u.onend = u.onerror = () => { clearTimeout(guard); resolve(); }; }
+      ss.speak(u); });
+  });
+  return p.then(() => ({ cancelled }));
+}
+// where the camera looks for each line: at whoever is talking, or at the room the narrator names
+const ROOM_WORDS = [["Z9", /canteen|breakroom|break room|lunch|coffee/], ["Z2", /control room|console|control desk/], ["Z4", /airlock|reactor hall|calibration rack|thermal loop/],
+  ["Z5", /override vault|vault|stabili[sz]er/], ["Z8", /janitor|closet|ventilation shunt|shunt/], ["Z6", /alarm station|\bcas\b|camera/], ["Z3", /turbine|pump bay|coolant bus|test bench/],
+  ["Z1", /lobby|admin|front gate|\bgate\b/], ["Z16", /courtyard|smoking|muster/], ["Z10", /locker/], ["Z12", /records/], ["Z14", /training/], ["Z15", /loading dock/],
+  ["Z11", /storage/], ["Z7N", /restroom|bathroom/]];
+function shotFor(D, sc, line) {
+  if (line.who !== "narrator" && line.kind !== "secret" && D.castById[line.who]) {
+    const p = positions(D, sc.t).pos[line.who]; if (p) return { ...sc, zone: p.zone, focus: [line.who] }; }
+  if (line.who === "narrator") { const low = line.text.toLowerCase();
+    let best = null; for (const [z, re] of ROOM_WORDS) { const m = low.match(re); if (m && D.zones[z] && (!best || m.index < best[1])) best = [z, m.index]; }
+    if (best) return { ...sc, zone: best[0], focus: [] }; }
+  return { ...sc, focus: [] };
+}
+function speakerLabel(D, line, revealed) {
+  if (line.who === "narrator") return { name: "Narrator" };
+  const c = D.castById[line.who];
+  if (line.kind === "secret" && !revealed) return { name: "Someone, thinking", hidden: true };
+  return { name: (c ? first(c.name) : line.who) + (line.kind === "thought" || line.kind === "secret" ? ", thinking" : ""), c };
+}
+
 function App({ initial }) {
   const [runs, setRuns] = useState(normalize(initial));
   const [ri, setRi] = useState(0);
@@ -493,6 +573,11 @@ function App({ initial }) {
   const [room, setRoom] = useState(null);
   const [theater, setTheater] = useState(false);
   const [drag, setDrag] = useState(false);
+  const [mv, setMv] = useState(null);           // {scene, line, intro} while the movie plays
+  const [mvShot, setMvShot] = useState(null);   // current scene (for the camera)
+  const [mvLine, setMvLine] = useState(null);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const voices = useVoices();
   const tRef = useRef(0); tRef.current = t;
   const beats = useMemo(() => D ? D.story.filter(b => layers.truth || !b.secret) : [], [D, layers.truth]);
 
@@ -501,7 +586,8 @@ function App({ initial }) {
   let target = full, zoomZone = null;
   if (D) {
     const { pos } = positions(D, t);
-    if (reveal) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 160, p.y - 90, 320, 180], 20); }
+    if (mvShot) { if (mvShot.zone && D.zones[mvShot.zone]) { zoomZone = mvShot.zone; target = fitRect(D, D.zones[mvShot.zone].rect, 60); } }
+    else if (reveal) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 160, p.y - 90, 320, 180], 20); }
     else if (caption && caption.zone && D.zones[caption.zone] && !title) { zoomZone = caption.zone; target = fitRect(D, D.zones[caption.zone].rect, 70); }
     else if (spyCam) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 380, p.y - 210, 760, 420], 0); zoomZone = p.zone; }
     else if (room) { zoomZone = room; target = fitRect(D, D.zones[room].rect, 70); }
@@ -526,6 +612,34 @@ function App({ initial }) {
     raf = requestAnimationFrame(step(performance.now()));
     return () => { cancelAnimationFrame(raf); clearTimeout(timer); }; }, [story, D, beats]);
 
+  // the movie: fly to each scene, then read its lines one by one, waiting for each voice to finish
+  const stopMovie = () => { window.speechSynthesis?.cancel(); setMv(null); setMvShot(null); setMvLine(null); };
+  useEffect(() => { if (!mv || !D || !D.movie) return; let alive = true, raf;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const run = async () => {
+      if (mv.intro) { setMvShot({ zone: "" }); setMvLine({ intro: true }); await sleep(5200); if (alive) setMv({ scene: 0, line: 0 }); return; }
+      const sc = D.movie.scenes[mv.scene];
+      if (!sc) { setMvShot(null); setMvLine(null); setMv(null); setReveal(true); return; }
+      if (mv.line === 0) { setMvLine(null); setMvShot(sc);
+        await new Promise(res => { const tgt = sc.t; if (Math.abs(tRef.current - tgt) > 300) { tRef.current = Math.max(0, tgt - 45); setT(tRef.current); }
+          const step = (last) => (now) => { if (!alive) return res(); const dt = (now - last) / 1000; const nt = Math.min(tgt, tRef.current + dt * 120);
+            setT(nt); if (nt < tgt) raf = requestAnimationFrame(step(now)); else res(); };
+          raf = requestAnimationFrame(step(performance.now())); });
+        await sleep(900); }
+      if (!alive) return;
+      const ln = sc.lines[mv.line];
+      if (!ln) { await sleep(700); if (alive) setMv({ scene: mv.scene + 1, line: 0 }); return; }
+      setMvShot(shotFor(D, sc, ln));
+      setMvLine({ ...ln, last: mv.scene === D.movie.scenes.length - 1 });
+      await speak(voices, D, ln, voiceOn);
+      if (!alive) return;
+      await sleep(400 + (ln.pause || 0) * 1000);
+      if (alive) setMv({ scene: mv.scene, line: mv.line + 1 }); };
+    run(); return () => { alive = false; cancelAnimationFrame(raf); }; }, [mv, D]);
+  const startMovie = () => { setPlaying(false); setStory(null); setCaption(null); setTitle(null); setReveal(false); setRoom(null); setSpyCam(false);
+    if (mv) { stopMovie(); return; } window.speechSynthesis?.cancel(); setT(0); setMv({ intro: true }); };
+  const nextScene = () => { window.speechSynthesis?.cancel(); setMv(m => m && !m.intro ? { scene: m.scene + 1, line: 0 } : { scene: 0, line: 0 }); };
+
   const startStory = () => { setPlaying(false); setReveal(false); setRoom(null); setSpyCam(false);
     if (story !== null) { setStory(null); setCaption(null); setTitle(null); return; }
     const i = Math.max(0, beats.findIndex(b => b.t >= t)); if (i === 0) setT(0); setStory(i); };
@@ -537,7 +651,7 @@ function App({ initial }) {
   useEffect(() => { const k = (e) => { if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
       if (e.code === "Space") { e.preventDefault(); setPlaying(p => !p); setStory(null); setTitle(null); }
       if (e.key === "ArrowRight") { setStory(s => s === null ? null : s + 1); }
-      if (e.key === "Escape") { setStory(null); setCaption(null); setTitle(null); setReveal(false); setRoom(null); } };
+      if (e.key === "Escape") { window.speechSynthesis?.cancel(); setMv(null); setMvShot(null); setMvLine(null); setStory(null); setCaption(null); setTitle(null); setReveal(false); setRoom(null); } };
     addEventListener("keydown", k); return () => removeEventListener("keydown", k); }, []);
 
   const shell = (inner) => html`<div class=${"app" + (theater ? " theater" : "")} onDragOver=${e => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)}
@@ -547,7 +661,7 @@ function App({ initial }) {
     <div class="screen" style=${{ display: "grid", placeItems: "center" }}><p class="meta">Drop one or more replay.json files here, or open them. Runs are saved in runs/&lt;run id&gt;/replay.json.</p></div>`);
 
   const o = D.meta.outcome; const toggle = (k) => setLayers(l => ({ ...l, [k]: !l[k] }));
-  const focus = caption ? caption.focus : null;
+  const focus = mvShot && mvShot.focus && mvShot.focus.length ? mvShot.focus : caption ? caption.focus : null;
   const spy = D.castById[D.meta.saboteur];
   const ended = t >= D.duration - 1;
   const truth = layers.truth || spyCam || reveal;
@@ -576,7 +690,7 @@ function App({ initial }) {
           <option value="">Whole map</option>${Object.entries(D.zones).map(([z, d]) => html`<option key=${z} value=${z}>${d.name}</option>`)}</select>
         <button class=${"spy" + (spyCam ? " on" : "")} aria-pressed=${spyCam} onClick=${() => { setSpyCam(v => !v); setRoom(null); }}>Spy-cam</button>
       </div>
-      ${zoomZone && !title && !reveal ? html`<${RoomCard} D=${D} t=${t} zone=${zoomZone} truth=${truth} onClose=${room ? () => setRoom(null) : null} />` : null}
+      ${zoomZone && !title && !reveal && !mv ? html`<${RoomCard} D=${D} t=${t} zone=${zoomZone} truth=${truth} onClose=${room ? () => setRoom(null) : null} />` : null}
       ${caption && !title ? html`<div class=${"caption" + (caption.kind === "note" ? " note" : "")} role="status"><h3>${caption.clock ? caption.clock + " · " : ""}${caption.title}</h3>
         ${caption.secret ? html`<div class="secret">ONLY THE AUDIENCE SEES THIS</div>` : null}<p>${caption.text}</p>
         ${caption.inner && (truth || !D.castById[caption.inner.agent]?.saboteur) ? html`<q>${first(D.castById[caption.inner.agent].name)}, thinking: ${caption.inner.text}</q>` : null}</div>` : null}
@@ -593,6 +707,15 @@ function App({ initial }) {
         <p>${spy.role}. ${o.text}</p>
         <div class="moves">${D.spyMoves.map((e, i) => html`<div key=${i} onClick=${() => { setReveal(false); setT(e.t); }} style=${{ cursor: "pointer" }}><b>${e.clock}</b>${e.text}</div>`)}</div>
         <div style=${{ marginTop: "14px" }}><button onClick=${() => { setReveal(false); setT(Math.min(t, D.duration - 2)); }}>Back to the map</button></div></div></div>` : null}
+      ${mv ? html`<div class="movie-bars" style=${{ position: "absolute", inset: 0, pointerEvents: "none" }}></div>` : null}
+      ${mv && mvLine && mvLine.intro ? html`<div class="titlecard" role="status"><div><div class="kicker">A MELTDOWN film · seed ${D.meta.seed}</div>
+        <h2>${D.movie.title}</h2><p>${D.movie.logline}</p></div></div>` : null}
+      ${mv && mvShot && mvShot.title ? html`<div class="scene-tag">${clockOf(mvShot.t).slice(0, 5)} · ${mvShot.title}</div>` : null}
+      ${mv && mvLine && !mvLine.intro ? (() => { const lab = speakerLabel(D, mvLine, mvLine.last);
+        return html`<div class=${"subtitle " + mvLine.kind} role="status" aria-live="polite"><div class="who">
+          ${lab.c && !lab.hidden ? html`<span class="av" style=${{ background: lab.c.color }}>${initials(lab.c.name)}</span>` : null}${lab.name}</div>
+          <p>${mvLine.kind === "say" ? "“" + mvLine.text + "”" : mvLine.text}</p>
+          ${mvLine.verified === false ? html`<div class="who" style=${{ color: "var(--muted)", marginTop: "6px" }}>paraphrased by the narrator</div>` : null}</div>`; })() : null}
       <div class="layers" role="group" aria-label="Map layers">
         ${[["names", "Names"], ["cctv", "Cameras & blind spots"], ["badges", "Badge swipes"], ["runs", "Trails & runs"], ["comms", "Speech bubbles"], ["clues", "Clues"], ["truth", "Reveal truth"]].map(([k, l]) =>
           html`<button key=${k} class=${layers[k] ? "on" : ""} aria-pressed=${layers[k]} onClick=${() => toggle(k)}>${l}</button>`)}
@@ -612,9 +735,12 @@ function App({ initial }) {
         <button class=${playing ? "on" : ""} onClick=${() => { setStory(null); setCaption(null); setTitle(null); setReveal(false); setPlaying(p => !p); }}>${playing ? "Pause" : "Play"}</button>
         <select id="speed" aria-label="Playback speed" value=${speed} onChange=${e => setSpeed(+e.target.value)}>
           ${[15, 30, 60, 120, 300].map(s => html`<option key=${s} value=${s}>${s}× (${s >= 60 ? s / 60 + " game-min/s" : s + " game-s/s"})</option>`)}</select>
-        <button class="primary" onClick=${startStory}>${story === null ? "Play the story" : "Stop story"}</button>
+        <button class="primary" disabled=${!D.movie} title=${D.movie ? "Narrated, with a voice for everyone" : "Write it first: python -m meltdown.movie runs/latest"} onClick=${startMovie}>${mv ? "Stop the movie" : "Play the movie"}</button>
+        ${mv ? html`<button onClick=${nextScene}>Next scene →</button>` : null}
+        <button class=${voiceOn ? "on" : ""} aria-pressed=${voiceOn} onClick=${() => { setVoiceOn(v => !v); window.speechSynthesis?.cancel(); }}>Voices ${voiceOn ? "on" : "off"}</button>
+        <button onClick=${startStory}>${story === null ? "Quick story" : "Stop story"}</button>
         ${story !== null ? html`<button onClick=${() => setStory(s => s + 1)}>Next beat →</button>` : null}
-        <span class="meta">${story !== null ? `beat ${story + 1} of ${beats.length}` : "Space play · → next beat · Esc stop · double-click a room to zoom"}</span>
+        <span class="meta">${mv && !mv.intro && D.movie ? `scene ${Math.min(mv.scene + 1, D.movie.scenes.length)} of ${D.movie.scenes.length}` : story !== null ? `beat ${story + 1} of ${beats.length}` : "Space play · → next beat · Esc stop · double-click a room to zoom"}</span>
       </div>
       <${Track} D=${D} t=${t} onSeek=${(v) => { setStory(null); setCaption(null); setTitle(null); setReveal(false); setT(v); }} />
       <div class="legend"><span><i class="dot" style=${{ background: "#f2b544" }}></i>true meltdown meter</span><span>dotted: what the console shows</span><span>green bands: test stages</span><span>ticks: story beats</span></div>

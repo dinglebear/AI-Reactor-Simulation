@@ -858,6 +858,12 @@ class World:
                 self.deliver(q.id, p.first, text, "say", wake=(q.id == to))
             self.log.speech(self.t, p.id, "say", text, to=to, zone=p.zone)
             return
+        if channel == "pa" and p.tier == "director":     # site-wide speakers, restrooms included
+            for q in self.people.values():
+                if q.id != p.id:
+                    self.deliver(q.id, p.first, f"[PA] {text}", "pa", wake=(q.id == to))
+            self.log.speech(self.t, p.id, "pa", text, to=to, zone=p.zone)
+            return
         if not zr:
             return  # no radio in restrooms
         if channel == "exec":

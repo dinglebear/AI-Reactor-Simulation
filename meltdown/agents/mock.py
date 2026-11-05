@@ -73,7 +73,12 @@ class MockBrain:
         self.skip = {}             # station -> when the saboteur last gave up on it
         self.asked = {}            # director: suspect id -> when we last interviewed them
         self.blame_budget = 1 if self.rng.random() < 0.5 else 0
-        self.dir_mem = dict(interviewed=set(), radio_read=set(), cctv={}, inspected={}, corp_msg=False,
+        self.pranks = ["Heard the vault door alarm went off last night. Just saying.",
+                       "Word is the canteen is out of pudding. Total cover-up.",
+                       "Somebody told me the turbine hall is haunted. I believe it.",
+                       "Rumour: Corporate's bringing a mascot to the bonus party."]
+        self.rumours, self.reacted = set(), {}
+        self.dir_mem = dict(interviewed=set(), radio_read=set(), cctv={}, inspected={}, corp_msg=False, pa_done=set(),
                             cross_t=-9999, last_audit=-9999, seen_reports=0)
 
     def decide(self, p, obs_text=None):
@@ -132,6 +137,7 @@ class MockBrain:
         news = [m for m in p.inbox if m["channel"] in ("see", "alarm")
                 and not m["text"].startswith(("[building alarm]", "[test warning]"))]
         requests = [m for m in p.inbox if m.get("go")]
+        heard = [m for m in p.inbox if m["channel"] == "say" and self.is_rumour(m["text"])]
         inbox_orders = [m for m in p.inbox if m["channel"] == "order"]
         p.inbox.clear()
         if p.pending and p.pending["kind"] == "badge_request":
@@ -182,6 +188,10 @@ class MockBrain:
                                      f"{q.first}, who's covering your station?", "I give this test fifty-fifty."])
                     return blank(f"Small talk. {quirk}", speech=line, channel="say", actions=[act("wait")])
             return blank("Eating. Not thinking about the plant for ten minutes.", actions=[act("wait")])
+        if heard and w.alarm_level < 2:
+            g = self.gossip(p, heard[-1])
+            if g:
+                return g
         if p.lent_to:
             return blank(f"{w.people[p.lent_to].first} still has my badge. I'll stay put until it comes back. "
                          "Should I tell someone?", actions=[act("work")])
@@ -246,11 +256,40 @@ class MockBrain:
         if p.archetype in ("Literal Robot", "Perfectionist") and p.zone == "Z2" and r.random() < 0.3:
             sh = w.plant.shown(w.t)
             sp, ch = f"Console: heat {sh['heat']:.0f}, stability {sh['stability']:.0f}, incident {sh['incident']:.0f}.", "radio"
-        if p.archetype == "Chaos Prankster" and r.random() < 0.08:
-            sp, ch = "Heard the vault door alarm went off last night. Just saying.", "say"
+        if p.archetype == "Chaos Prankster" and r.random() < 0.08 and self.pranks:
+            sp, ch = self.pranks.pop(), "say"
+            self.rumours.add(sp)      # made-up gossip for fun; nobody below the Director knows the HR tip
         if p.archetype == "Spooky Mystic" and r.random() < 0.15:
             sp, ch = "Something in this building wants out today.", "say"
         return blank(quirk, speech=sp, channel=ch, actions=[act("work")])
+
+    # ----------------------------------------------------------------- gossip (mock stand-in only)
+    def is_rumour(self, text):
+        return text in self.rumours or any(text.endswith(x) for x in self.rumours)
+
+    def gossip(self, p, m):
+        """Heard a rumour: dismiss it if the source has a reputation, otherwise maybe pass it on, with credit."""
+        w, r = self.w, self.rng
+        src = next((q for q in w.people.values() if q.first == m["frm"]), None)
+        if not src or src.id == p.id:
+            return None
+        story = next(x for x in self.rumours if m["text"].endswith(x))
+        origin = m["text"][:-len(story)].split(" says: ")[0].strip() if " says: " in m["text"] else src.first
+        view = w.opinions.get(p.id, {}).get(next((q.id for q in w.people.values() if q.first == origin), ""), ("", ""))
+        doubts = p.group == "Analytical" or "believe half" in view[1] or "fake rumour" in view[1]
+        n = self.reacted.get(story, 0)
+        if n >= 3 or r.random() < 0.4:
+            return None                                   # most people just let it go by
+        self.reacted[story] = n + 1
+        if doubts:
+            line = (f"Sure, {origin}. Like last time." if src.first == origin
+                    else f"Consider the source, {src.first}. That's one of {origin}'s.")
+            return blank(f"That came from {origin}. I'll believe it when I see it.", speech=line, channel="say",
+                         to=src.id, actions=[act("work")])
+        if p.archetype in C.YES_PEOPLE + ("Daydreamer", "Friendly Optimist", "Panic-Monster") and r.random() < 0.6:
+            return blank(f"Ooh. {origin} would know.", speech=f"{origin} says: {story}", channel="say",
+                         actions=[act("work")])
+        return None
 
     # ----------------------------------------------------------------- honest manager
     def manager(self, p):
@@ -582,6 +621,15 @@ class MockBrain:
             mem["corp_msg"] = True
             acts.append(act("message_corporate", text=f"Stage 2 underway. Console heat {sh['heat']:.0f}. I may need to "
                                                      "slow the test if I find what HR warned about."))
+        if not speech:
+            from ..engine import Engine
+            soon = [(c, a) for c, a, _ in Engine.TEST_WARNINGS if 0 <= at(c) - t <= 420 and c not in mem["pa_done"]]
+            if soon:
+                c, a = soon[0]
+                mem["pa_done"].add(c)
+                speech, channel = (f"Attention all staff: at {c} the test rig will set off a planned alarm, "
+                                   f"{a.split(' on the')[0]}. That one is part of the test. Stay at your posts."), "pa"
+                thoughts.append("Warn the floor before the rig's alarm, or half of them will panic.")
         if not thoughts:
             thoughts.append(r.choice(QUIRKS["Director"]))
         return blank(" ".join(thoughts), speech=speech, channel=channel, actions=acts)

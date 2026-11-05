@@ -27,6 +27,21 @@ python -m meltdown.run --live --minutes 30 --human auto
 Useful flags: `--saboteur RX|HY|IE|SF` picks the saboteur's seat, `--speed N` sets game seconds per real
 second (0 = flat out), `--log-prompts` stores every agent's full observation, `--concurrency N` caps parallel API calls.
 
+## Run it on your Claude Pro or Max plan (no API key)
+
+```bash
+claude                                                  # once: install Claude Code and log in with your plan
+python -m meltdown.run --claude-code --minutes 10 --human auto
+python -m meltdown.experiment --claude-code --games 2    # batches work too
+```
+
+Each agent turn goes through `claude -p` with only the game prompt (Claude Code's own prompt and tools are
+switched off), so it counts against your plan's usage instead of API credit. When you hit the plan's usage
+limit the game pauses, with the game clock frozen, and carries on by itself when the limit resets, so a full
+game can run overnight. Up to 4 turns run at once. The run prints its usage at the end, including what the same
+game would have cost on the API. If `ANTHROPIC_API_KEY` is set in your shell it is ignored in this mode.
+Reasoning summaries aren't available this way, so the replay's Minds feed shows each agent's own `thought` only.
+
 ## Watch the replay
 
 ```bash
@@ -60,6 +75,22 @@ Each batch goes to `experiments/<name>/`: `summary.md` (outcomes, teamwork avera
 reel for every game), `metrics.csv` (one row per game), `replays.html` (every game in one viewer with a run
 picker) and `runs/` with the raw replays. Batch runs never pause for you. Measure definitions and a methods draft
 are in [docs/METHODS.md](docs/METHODS.md). Mock numbers only test the pipeline; use `--live` for results.
+
+## The movie
+
+After a game, Claude can read the whole log (every event, line and private thought) and write a narrated
+movie: 12 to 20 scenes with suspense, the spy's private thoughts heard in a disguised voice until the reveal.
+
+```bash
+python -m meltdown.movie runs/latest                # uses the game's mode: --claude-code, --live, or --mock
+python -m meltdown.run --claude-code --movie        # or write it straight after the game
+```
+
+Then open the replay and press **Play the movie**: the camera flies to each scene and your browser's
+text-to-speech reads it with a different voice for every person and a narrator voice (Voices on/off; Next scene
+skips ahead; screen-record it for the video). The writer may only quote what people actually said or thought;
+any line it couldn't match word for word in the log is marked "paraphrased by the narrator". Writing a script
+takes a minute or two and one Opus call.
 
 ## Cost of a live run
 

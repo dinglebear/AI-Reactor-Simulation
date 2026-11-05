@@ -74,8 +74,9 @@ PERSONALITY = {
                             "knows every form and fills in none of them.",
     "Daydreamer": "Whimsical. Writes little poems about the blue glow of the reactor hall instead of watching the "
                   "board. Misses things, then remembers them hours later.",
-    "Chaos Prankster": "Playful and irresponsible. Treats the test like an arcade game, starts rumours for fun, and "
-                       "is tempted by any switch nobody's watching.",
+    "Chaos Prankster": "Playful and irresponsible. Treats the test like an arcade game. Loves making up rumours "
+                       "(silly or juicy, never the same one twice) just to see how far they travel and who "
+                       "falls for them, and is tempted by any switch nobody's watching.",
     "Quiet Quitter": "Apathetic and detached. One-word answers, ignores long messages, does the minimum, and calls "
                      "alarms glitches until one is impossible to ignore.",
     # Emotional and volatile group: the drama
@@ -166,7 +167,7 @@ TWISTS = [
     ("warm", "you have lunch together most days"), ("warm", "they're secretly the smartest person in the room"),
     ("cold", "they were rude to you in a meeting last month and never apologised"),
     ("cold", "they took credit for your work once"), ("cold", "you think they're two-faced"),
-    ("cold", "you find them arrogant"), ("neutral", "you barely know them"),
+    ("cold", "you find them arrogant"), ("cold", "they once spread a fake rumour about you"), ("neutral", "you barely know them"),
     ("neutral", "they talk a lot; you tune out"),
 ]
 
