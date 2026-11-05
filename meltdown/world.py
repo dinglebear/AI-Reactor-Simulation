@@ -614,7 +614,7 @@ class World:
             p.badge, p.lent_to = None, sab.id
             sab.extra_badges.append(p.id)
             self.add_clue("testimony", p.zone, None, f"{p.first} admits lending their badge to {sab.first} in "
-                          f"the restroom at {hhmm(self.t)}.", [sab.id], holder=p.id)
+                          f"the {F.ZONES[p.zone]['name']} at {hhmm(self.t)}.", [sab.id], holder=p.id)
             self.deliver(sab.id, p.first, "(whispered) Sure, just bring it back.", "whisper", wake=True)
             self.ev("badge_lent", f"{p.first} lent their badge to {sab.first}", actor=p.id, zone=p.zone,
                     public=False, beat=3, target=sab.id)
@@ -624,7 +624,7 @@ class World:
                 public=False, beat=1, target=sab.id)
         if p.group == "Analytical":
             self.add_clue("testimony", p.zone, None, f"{p.first} says {sab.first} asked to borrow their badge "
-                          f"in the restroom at {hhmm(self.t)}.", [sab.id], holder=p.id)
+                          f"in the {F.ZONES[p.zone]['name']} at {hhmm(self.t)}.", [sab.id], holder=p.id)
         return "refused"
 
     def return_badges(self, p: Person):
@@ -695,6 +695,8 @@ class World:
             t = self.people.get(target or "")
             if not t or t.detained:
                 return "interview needs a person id"
+            if t.pending and t.pending.get("kind") == "interview":
+                return f"{t.first} is already on the way to your desk"
             t.order = "director_desk"
             self.send(t, "director_desk")
             t.pending = dict(kind="interview", frm=director.id, t=self.t)
