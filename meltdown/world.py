@@ -172,9 +172,6 @@ class World:
                 kind, start, mins = b
                 if self.t >= start:
                     p.breaks.remove(b)
-                    if self.alarm_level >= 2:
-                        self.deliver(p.id, "Rota", f"Your {kind} break is cancelled: the plant alarm is on.", "rota")
-                        continue
                     p.break_kind, p.break_until = kind, self.t + mins * 60
                     spot = "the canteen" if kind == "lunch" else "the breakroom"
                     self.deliver(p.id, "Rota", f"Your {kind} break starts now ({mins} min). {spot.capitalize()} is open.",
@@ -431,7 +428,6 @@ class World:
                 p.exposed = True
                 self.deliver(p.id, "Building", f"[building alarm] {F.ZONES[p.zone]['name']} is contaminated. Get out now.",
                              "alarm", wake=True)
-                self.send(p, "courtyard", "run")
             else:
                 self.deliver(p.id, "Building", f"[building alarm] Contamination: {names} sealed off. Stay out.", "alarm")
 

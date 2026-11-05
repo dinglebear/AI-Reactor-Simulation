@@ -184,7 +184,7 @@ class Engine:
             w.plant.target = w.manual_target
 
     ALARM_LEVELS = [(70, 3, "SITE EMERGENCY", "Sirens. Staff without a response post muster in the courtyard."),
-                    (40, 2, "ALL HANDS", "Building alarm. Breaks cancelled. Everyone to a response station and work it."),
+                    (40, 2, "ALL HANDS", "Building alarm. All staff to response stations."),
                     (28, 1, "ADVISORY", "Amber advisory in the control room. Meltdown meter climbing.")]
 
     def alarms(self):
@@ -209,8 +209,6 @@ class Engine:
             text = f"{name}: {what} (console meltdown meter {shown:.0f})"
         self.log.event(w.t, "plant_alarm", text, beat=3 if rising and level >= 2 else 2, level=level, rising=rising)
         for q in w.people.values():
-            if level >= 2 and q.break_kind:
-                q.break_kind, q.break_until = "", 0
             w.deliver(q.id, "Building", f"[building alarm] {text}", "alarm", wake=rising and level >= 2)
 
     TEST_WARNINGS = [

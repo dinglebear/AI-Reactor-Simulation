@@ -101,6 +101,12 @@ The mock Director interviews the main suspect before an arrest, which is often w
 `accuse` detains someone. It is **justified** with two different clue types pointing at them. Arresting the
 saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if MELTDOWN was really ≥ 60.
 
+## Who decides what
+
+In `--live` runs every person is a Claude agent, and the engine never moves or acts for them: alarms, the break
+rota and contamination only send messages. The `--mock` brains in `meltdown/agents/mock.py` are scripted stand-ins
+for testing without an API key, so their behaviour is not a result.
+
 ## The map
 
 The station is a 1640 × 940 grid of rooms joined by corridors (`meltdown/facility.py`). People route through the
@@ -136,7 +142,7 @@ spread people out and give slackers, patrols and secret conversations somewhere 
   (10:50-11:50), staggered by department and split into two halves. The canteen fills up and stations thin out.
   Managers and the Director don't get scheduled breaks.
 - **Building alarms** follow the control room console's meltdown reading: advisory at 28, ALL HANDS at 40
-  (breaks cancelled, everyone to a response station), site emergency at 70 (sirens; staff without a response post
+  (the building tells all staff to go to response stations; nobody is moved automatically), site emergency at 70 (sirens; staff without a response post
   muster in the courtyard). Because they read the console, a masked console keeps them quiet. These are game thresholds, not a
   model of a real alarm system.
 - **Test warnings.** At set times the test rig raises expected warnings (high output, heat pulses, a stability
@@ -158,7 +164,7 @@ alarm to a meltdown in about ten minutes. Only a crowd stops it:
 
 **Contamination.** If the meter spikes past 85, the room or rooms behind the push are contaminated and sealed off for
 the rest of the day, even if the meltdown is stopped. Past 95 the Reactor Hall and Override Vault go too. Anyone
-inside is marked exposed and evacuates to the courtyard; sealed stations can't be worked, which makes the next
+inside is marked exposed and told to get out (whether they do is up to them); sealed stations can't be worked, which makes the next
 spike harder to stop. If the spy is still free when the game ends with contaminated rooms (at noon or after a
 SCRAM), the spy wins.
 
