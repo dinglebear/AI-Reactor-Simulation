@@ -60,6 +60,35 @@ class Stations(unittest.TestCase):
         self.assertIn("display_calibration", self.w.holds)
         self.assertTrue(any(c.holder == self.ada.id and c.type == "testimony" for c in self.w.clues))
 
+    def test_crisis_snowballs_and_crowd_holds_it(self):
+        from meltdown.plant import Plant
+        alone, crowd = Plant(), Plant()
+        for pl in (alone, crowd):
+            pl.incident = 50
+        for _ in range(60):                      # five game minutes
+            alone.step(0, 5, {}, (0, 0))
+            crowd.step(0, 5, {}, (12, 0))
+        self.assertGreater(alone.incident, 65)
+        self.assertLess(crowd.incident, 50)
+
+    def test_spy_help_makes_it_worse(self):
+        from meltdown.plant import Plant
+        a, b = Plant(), Plant()
+        for pl in (a, b):
+            pl.incident = 45
+        for _ in range(24):
+            a.step(0, 5, {}, (4, 0))
+            b.step(0, 5, {}, (4, 1))
+        self.assertGreater(b.incident, a.incident)
+
+    def test_spike_contaminates_and_seals(self):
+        self.w.plant.incident = 86
+        place(self.w, self.ada, "display_calibration")
+        self.w.step_contamination()
+        self.assertIn("Z4", self.w.contaminated)
+        self.assertTrue(self.ada.exposed)
+        self.assertIn("sealed", self.w.send(self.sab, "primary_thermal_loop"))
+
 
 if __name__ == "__main__":
     unittest.main()

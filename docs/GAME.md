@@ -135,13 +135,32 @@ spread people out and give slackers, patrols and secret conversations somewhere 
 - **Break rota.** Every staff member gets a 15-minute coffee break (09:05-10:45) and a 30-minute early lunch
   (10:50-11:50), staggered by department and split into two halves. The canteen fills up and stations thin out.
   Managers and the Director don't get scheduled breaks.
-- **Building alarms** follow the control room console's meltdown reading: advisory at 40, plant alert at 60
-  (breaks cancelled, everyone back to their post), site emergency at 80 (sirens; staff without a post muster in the
-  courtyard). Because they read the console, a masked console keeps them quiet. These are game thresholds, not a
+- **Building alarms** follow the control room console's meltdown reading: advisory at 28, ALL HANDS at 40
+  (breaks cancelled, everyone to a response station), site emergency at 70 (sirens; staff without a response post
+  muster in the courtyard). Because they read the console, a masked console keeps them quiet. These are game thresholds, not a
   model of a real alarm system.
 - **Test warnings.** At set times the test rig raises expected warnings (high output, heat pulses, a stability
   sweep). They are labelled as part of the test, but they land on the same desks as real trouble, which gives the
   spy cover and the Director something to second-guess.
+
+## The crisis
+
+Below 40 the meltdown meter climbs while stations sit off normal (3 points a minute each) and from the heat and
+stability danger bands. Past 40 it **snowballs**: it climbs faster the higher it gets and can go from the first
+alarm to a meltdown in about ten minutes. Only a crowd stops it:
+
+- `respond` at a response station (control console, thermal loop, stabilizer, backup rack, coolant buses, test
+  bench, ventilation shunt) pulls the meter back; up to three people per station count, and it lasts five minutes.
+- Resetting off-normal stations removes their push.
+- **The spy can "help" too.** Their `respond` quietly adds to the meter while they look like the hardest worker in
+  the room. People next to them may notice the numbers dip whenever the spy touches the station, which becomes
+  testimony for the Director.
+
+**Contamination.** If the meter spikes past 85, the room or rooms behind the push are contaminated and sealed off for
+the rest of the day, even if the meltdown is stopped. Past 95 the Reactor Hall and Override Vault go too. Anyone
+inside is marked exposed and evacuates to the courtyard; sealed stations can't be worked, which makes the next
+spike harder to stop. If the spy is still free when the game ends with contaminated rooms (at noon or after a
+SCRAM), the spy wins.
 
 The meltdown meter is deliberately not realistic. It is a game score: it climbs while stations sit off normal and
 when heat or stability are in their danger bands, and it calms slowly when things are fine.
@@ -150,8 +169,8 @@ when heat or stability are in their danger bands, and it calms slowly when thing
 
 - **Meltdown:** the MELTDOWN meter reaches 100. The spy wins.
 - **SCRAM:** the Director shuts the unit down. That stops any meltdown but fails the test. If the meter really was
-  at 60 or more (or the spy was already caught), the shutdown was justified and the Director wins. A panic SCRAM on
-  a calm plant hands the win to the spy.
+  at 60 or more (or the spy was already caught), the shutdown was justified and the Director wins, unless rooms
+  were already contaminated and the spy is still free. A panic SCRAM on a calm plant hands the win to the spy.
 - **Caught:** the Director arrests the spy.
 - **Two wrong arrests:** corporate pulls the Director off the floor. The spy wins.
 - **Noon:** if the test failed, the spy got what they were sent for; if it passed, nobody wins.

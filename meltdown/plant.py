@@ -18,6 +18,12 @@ SYSTEMS = ("core", "coolant", "instruments", "security")
 WEAR_PER_MIN = {"core": 0.25, "coolant": 0.35, "instruments": 0.2, "security": 0.15}
 REPAIR_PER_MIN = 1.0          # one worker at a matching station
 MELTDOWN_LIMIT = 100.0
+# Crisis tuning (game numbers): past CRISIS_AT the meter snowballs; each responder pulls it back, the spy's "help" adds.
+CRISIS_AT = 40.0
+CASCADE = 0.15            # extra meter per minute for every point above CRISIS_AT
+RESPOND_PER_MIN = 0.7    # each person working crisis response
+SPOIL_PER_MIN = 1.6       # the spy "helping"
+RESPONSE_CAP = 3          # responders per station that count
 
 # Corporate certification test. Targets are console output %.
 STAGES = [
@@ -50,9 +56,12 @@ class Plant:
     scrammed: bool = False
     status: str = "RUNNING"       # RUNNING | MELTDOWN | SCRAM
     stage_minutes: dict = field(default_factory=lambda: {1: 0.0, 2: 0.0, 3: 0.0})
+    in_crisis: bool = False
+    peak: float = 0.0
 
-    def step(self, t: float, dt: float, crew_at: dict):
-        """crew_at: system -> number of workers currently maintaining it."""
+    def step(self, t: float, dt: float, crew_at: dict, response: tuple = (0, 0)):
+        """crew_at: system -> number of workers currently maintaining it.
+        response: (helpers, spoilers) working crisis response right now. Game numbers only."""
         if self.status != "RUNNING":
             return
         m = dt / 60.0
@@ -82,9 +91,17 @@ class Plant:
         self.stability = max(0.0, min(100.0, self.stability))
         # incident meter: driven by danger zones, slowly calms when the plant is healthy
         off = sum(1 for k, v in se.items() if v != SETTINGS[k]["nominal"] and k != "display_calibration")
-        danger = max(0, self.heat - 75) * 0.6 + max(0, 45 - self.stability) * 0.5 + 1.4 * off
+        danger = max(0, self.heat - 75) * 0.6 + max(0, 45 - self.stability) * 0.5 + 3.0 * off
         calm = 0.1 if (self.heat < 65 and self.stability > 70) else 0.0
+        # crisis: past CRISIS_AT the meter feeds on itself and only a crowd of responders can hold it
+        helpers, spoilers = response
+        if self.incident >= CRISIS_AT:
+            danger += 1.2 + CASCADE * (self.incident - CRISIS_AT)
+            calm = RESPOND_PER_MIN * helpers
+            danger += SPOIL_PER_MIN * spoilers
+        self.in_crisis = self.incident >= CRISIS_AT
         self.incident = max(0.0, self.incident + (danger - calm) * m)
+        self.peak = max(self.peak, self.incident)
         if self.incident >= MELTDOWN_LIMIT:
             self.incident = MELTDOWN_LIMIT
             self.status = "MELTDOWN"

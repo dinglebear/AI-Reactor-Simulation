@@ -9,7 +9,7 @@ from .config import hhmm
 
 TITLES = {
     "start": "Certification day", "corporate": "A call from corporate", "stage": "The test",
-    "spy": "The manager with a second employer", "plant_alarm": "The building alarm", "test_warning": "A warning that's part of the test", "break": "The rota", "interact": "A hand on the controls", "blocked": "Caught at the console", "lure": "A white lie",
+    "spy": "The manager with a second employer", "plant_alarm": "The building alarm", "contamination": "Sealed off", "test_warning": "A warning that's part of the test", "break": "The rota", "interact": "A hand on the controls", "blocked": "Caught at the console", "lure": "A white lie",
     "badge_ask": "A whispered favour", "badge_lent": "A favour in the restroom",
     "badge_refused": "A refusal", "clue_found": "A clue", "arrest": "An arrest", "scram": "SCRAM",
     "pause": "The game holds its breath", "high_alert": "Lock-in", "handler_msg": "A message out",
@@ -35,6 +35,8 @@ ASIDES = {
                   "narrow the field, and the Director needs two different kinds before an arrest counts.",
     "plant_alarm": "Narrator's note: the alarm levels are game thresholds on the meltdown meter, read from the "
                    "control room console. If the console is being fooled, so are the alarms.",
+    "contamination": "Narrator's note: contamination here is a game rule: a spike past 85 seals the room behind it for "
+                     "the rest of the day. It is not a model of how a real release would spread.",
     "scram": "Narrator's note: in the game, SCRAM is just 'end the run safely and lose the test'.",
 }
 

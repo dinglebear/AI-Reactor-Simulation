@@ -40,6 +40,8 @@ class Person:
     breaks: list = field(default_factory=list)     # [(kind, start, minutes)] from the rota
     break_until: float = 0.0
     break_kind: str = ""
+    responding_until: float = 0.0
+    exposed: bool = False
     scratchpad: str = ""
     inbox: list = field(default_factory=list)
     next_think: float = 0.0
@@ -98,6 +100,7 @@ class World:
             self.people[p.id] = p
         self.make_rota()
         self.alarm_level = 0
+        self.contaminated: list[str] = []
         self.saboteur_id = f"U4-MGR-{saboteur_dept}"
         self.people[self.saboteur_id].saboteur = True
         self.director = self.people["U4-DIR"]
@@ -195,6 +198,8 @@ class World:
         if p.detained:
             return "detained"
         dest_zone = F.STATIONS[station]["zone"]
+        if dest_zone in self.contaminated and p.zone != dest_zone:
+            return f"{F.ZONES[dest_zone]['name']} is contaminated and sealed off"
         r = F.route(p.zone, dest_zone, self.clearances(p))
         if r is None:
             return "no route"
@@ -370,6 +375,77 @@ class World:
         if forced:
             self.ev("restroom", f"{p.first} couldn't wait any longer and headed to the restroom", actor=p.id,
                     zone=p.zone, public=False)
+
+    # ------------------------------------------------------------------ crisis response and contamination
+    RESPONSE_STATIONS = ("control_console", "primary_thermal_loop", "stabilizer_override", "backup_rack",
+                         "coolant_bus_a", "coolant_bus_b", "test_bench", "ventilation_shunt")
+
+    def respond(self, p):
+        if p.station not in self.RESPONSE_STATIONS:
+            return f"respond only counts at a response station: {', '.join(self.RESPONSE_STATIONS)}"
+        if F.STATIONS[p.station]["zone"] in self.contaminated:
+            return "that room is sealed off"
+        p.activity = "working"
+        p.responding_until = self.t + 300
+        return "responding"
+
+    def response(self):
+        """(helpers, spoilers) on crisis response this step. The spy's 'help' counts against the plant."""
+        from .plant import RESPONSE_CAP
+        per = {}
+        spoilers = 0
+        for p in self.people.values():
+            if p.detained or p.activity != "working" or p.responding_until < self.t or p.station not in self.RESPONSE_STATIONS:
+                continue
+            if F.STATIONS[p.station]["zone"] in self.contaminated:
+                continue
+            if p.saboteur:
+                spoilers += 1
+                self._maybe_notice_spoiler(p)
+                continue
+            per[p.station] = per.get(p.station, 0) + 1
+        return sum(min(v, RESPONSE_CAP) for v in per.values()), spoilers
+
+    def _maybe_notice_spoiler(self, p):
+        label = F.STATIONS[p.station]["label"]
+        for q in self.occupants(p.station, exclude=p.id):
+            chance = {"Analytical": 0.012, "Volatile": 0.006}.get(q.group, 0.002)   # per 5 s step
+            if self.rng.random() < chance and not any(c.holder == q.id and c.station == p.station and p.id in c.suspects
+                                                     for c in self.clues):
+                self.add_clue("testimony", p.zone, p.station, f"{q.first} says {p.first} was 'helping' at the {label} "
+                              f"around {hhmm(self.t)}, but every time {p.first} touched it the numbers got worse.",
+                              [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"{p.first} is 'helping' at the {label}, but it keeps getting worse when "
+                                           f"{p.first} touches it.", "see", wake=True)
+
+    def contaminate(self, zones, why):
+        new = [z for z in zones if z not in self.contaminated and not F.ZONES[z].get("hall")]
+        if not new:
+            return
+        self.contaminated += new
+        names = ", ".join(F.ZONES[z]["name"] for z in new)
+        self.ev("contamination", f"{why} {names} {'is' if len(new) == 1 else 'are'} contaminated and sealed off.",
+                zone=new[0], beat=3, zones=new)
+        for p in self.people.values():
+            if p.zone in new and not p.detained:
+                p.exposed = True
+                self.deliver(p.id, "Building", f"[building alarm] {F.ZONES[p.zone]['name']} is contaminated. Get out now.",
+                             "alarm", wake=True)
+                self.send(p, "courtyard", "run")
+            else:
+                self.deliver(p.id, "Building", f"[building alarm] Contamination: {names} sealed off. Stay out.", "alarm")
+
+    def step_contamination(self):
+        """Game rule: big spikes leave rooms contaminated even if the meltdown itself is stopped."""
+        inc = self.plant.incident
+        off = [F.STATIONS[k]["zone"] for k in self.plant.off_nominal() if k != "display_calibration"]
+        if inc >= 85 and not self.contaminated:
+            self.contaminate(sorted(set(off)) or ["Z4"], "The meltdown meter spiked past 85.")
+        if inc >= 95 and "Z4" not in self.contaminated:
+            self.contaminate(["Z4", "Z5"], "The meltdown meter spiked past 95.")
+        for p in self.people.values():
+            if p.zone in self.contaminated and not p.detained and not p.exposed:
+                p.exposed = True
 
     def crew(self):
         out = {}

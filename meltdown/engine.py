@@ -135,7 +135,8 @@ class Engine:
             self.test_warnings()
             w.step_movement(STEP_S)
             w.step_bodies(STEP_S)
-            w.plant.step(w.t, STEP_S, w.crew())
+            w.plant.step(w.t, STEP_S, w.crew(), w.response())
+            w.step_contamination()
             w.step_tasks()
             if w.t >= next_presence:
                 w.sample_presence()
@@ -156,6 +157,15 @@ class Engine:
             w.outcome = dict(result="SHIFT_END", winner="saboteur" if not passed else "nobody",
                              text=("Noon. The test " + ("passed" if passed else "failed") +
                                    f", and {w.people[w.saboteur_id].name} walked out the gate unidentified."))
+        if w.contaminated:
+            names = ", ".join(F.ZONES[z]["name"] for z in w.contaminated)
+            exposed = sum(1 for q in w.people.values() if q.exposed)
+            w.outcome["contaminated"] = list(w.contaminated)
+            w.outcome["text"] += f" {names} {'is' if len(w.contaminated) == 1 else 'are'} contaminated; {exposed} people exposed."
+            spy_free = not w.people[w.saboteur_id].detained
+            if w.outcome["result"] in ("SHIFT_END", "SCRAM") and spy_free:
+                w.outcome["winner"] = "saboteur"
+                w.outcome["text"] += " The kaboom was stopped, but the damage is done and the spy is still free."
         self.frame()
         return self.finish()
 
@@ -173,9 +183,9 @@ class Engine:
         else:
             w.plant.target = w.manual_target
 
-    ALARM_LEVELS = [(80, 3, "SITE EMERGENCY", "Sirens across the building. All non-essential staff to the courtyard muster point."),
-                    (60, 2, "PLANT ALERT", "Building alarm. Breaks cancelled; everyone to their post."),
-                    (40, 1, "ADVISORY", "Amber advisory in the control room. Meltdown meter climbing.")]
+    ALARM_LEVELS = [(70, 3, "SITE EMERGENCY", "Sirens. Staff without a response post muster in the courtyard."),
+                    (40, 2, "ALL HANDS", "Building alarm. Breaks cancelled. Everyone to a response station and work it."),
+                    (28, 1, "ADVISORY", "Amber advisory in the control room. Meltdown meter climbing.")]
 
     def alarms(self):
         """Building alarms follow the CONSOLE reading, so a masked console keeps them quiet. Game-level only."""
@@ -186,14 +196,14 @@ class Engine:
             if shown >= th:
                 level = lv
                 break
-        if level < w.alarm_level and shown > [0, 32, 52, 72][w.alarm_level]:
+        if level < w.alarm_level and shown > [0, 22, 32, 62][w.alarm_level]:
             level = w.alarm_level                       # hysteresis: hold until it really drops
         if level == w.alarm_level:
             return
         rising = level > w.alarm_level
         w.alarm_level = level
         if level == 0:
-            text = "All clear. The meltdown meter is back under 32 on the console."
+            text = "All clear. The meltdown meter is back under control on the console."
         else:
             name, what = next((n, x) for _, lv, n, x in self.ALARM_LEVELS if lv == level)
             text = f"{name}: {what} (console meltdown meter {shown:.0f})"
@@ -226,7 +236,9 @@ class Engine:
         carriers = {p.id: p.extra_badges for p in w.people.values() if p.extra_badges}
         self.log.frame(w.t, w.people.values(), w.plant.true(), w.plant.shown(w.t),
                        dict(stage=st["n"] if st else 0, ha=int(w.high_alert), mask=int(w.plant.masked),
-                            target=round(w.plant.target), carry=carriers, al=w.alarm_level, off=w.plant.off_nominal(),
+                            target=round(w.plant.target), carry=carriers, al=w.alarm_level,
+                            cr=int(w.plant.in_crisis), cz=list(w.contaminated),
+                            ex=[p.id for p in w.people.values() if p.exposed], off=w.plant.off_nominal(),
                             det=[p.id for p in w.people.values() if p.detained]))
 
     def corporate(self):
@@ -292,6 +304,8 @@ class Engine:
             if tgt in F.ZONES:   # a zone: walk to its first named spot
                 tgt = next((k for k, v in F.STATIONS.items() if v["zone"] == tgt), tgt)
             return w.send(p, tgt, pace)
+        if typ == "respond":
+            return w.respond(p)
         if typ == "work":
             if p.activity == "waiting":
                 p.activity = "working"

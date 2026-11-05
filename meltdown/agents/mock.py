@@ -108,6 +108,22 @@ class MockBrain:
         return blank(f"That's not how I left it. {quirk}", speech=line, channel="exec" if p.tier == "manager" else "radio",
                      to=to, actions=[act("interact", p.station, nom)])
 
+    DEPT_RESPONSE = {"RX": ["control_console", "primary_thermal_loop"], "HY": ["coolant_bus_a", "coolant_bus_b", "ventilation_shunt"],
+                     "IE": ["backup_rack", "test_bench", "primary_thermal_loop"], "SF": []}
+
+    def response_post(self, p):
+        """Where this person goes when ALL HANDS sounds (None for security and custodians: they keep order)."""
+        w = self.w
+        opts = [p.home] if p.home in w.RESPONSE_STATIONS else []
+        opts += self.DEPT_RESPONSE.get(p.dept or "", [])
+        opts = [o for o in opts if F.STATIONS[o]["zone"] not in w.contaminated]
+        if p.tier != "staff" and p.dept != "SF":
+            opts = sorted(opts, key=lambda o: len(w.occupants(o)))
+        for o in opts:
+            if F.can_open(p.clearance, F.STATIONS[o]["zone"]) or p.zone == F.STATIONS[o]["zone"]:
+                return o
+        return None
+
     # ----------------------------------------------------------------- staff
     def staff(self, p):
         w, r = self.w, self.rng
@@ -137,12 +153,23 @@ class MockBrain:
                          pace=pace)
         if p.activity in ("moving", "restroom"):
             return blank(quirk)
-        if w.alarm_level >= 3 and not (p.home and F.STATIONS[p.home]["system"]) and p.station != "courtyard":
+        if p.zone in w.contaminated:
+            return blank("This room is sealed. Out, now.", actions=[act("move", "courtyard")], pace="run")
+        post = self.response_post(p)
+        if w.alarm_level >= 2 and post:
+            if p.station != post:
+                return blank(f"All hands. Get to the {F.STATIONS[post]['label']}. {quirk}", speech="On my way!",
+                             channel="radio", to=f"U4-MGR-{p.dept}", actions=[act("move", post)],
+                             pace="run" if p.group != "Low-Effort" or r.random() < 0.5 else "walk")
+            fix = self.check_station(p, quirk, p.group)
+            if fix:
+                return fix
+            if p.group == "Low-Effort" and r.random() < 0.25:
+                return blank(f"Somebody else will sort it. {quirk}", actions=[act("work")])
+            return blank("Hands on. Keep pulling it back.", actions=[act("respond")])
+        if w.alarm_level >= 3 and not post and p.station != "courtyard":
             return blank("Sirens. Muster point is the courtyard. Go, go.", speech="Everyone out to the courtyard!",
                          channel="say", actions=[act("move", "courtyard")], pace="run")
-        if w.alarm_level >= 2 and p.home and p.station != p.home:
-            return blank(f"That's the building alarm. Back to my post. {quirk}",
-                         actions=[act("move", p.home)], pace="run" if p.group == "Volatile" else "walk")
         if p.break_kind and w.alarm_level < 2:
             spot = "breakroom" if p.break_kind == "lunch" else ("courtyard" if p.group == "Low-Effort" else "breakroom")
             if p.station != spot:
@@ -241,6 +268,14 @@ class MockBrain:
         fix = self.check_station(p, "Managers notice these things.", "Leadership")
         if fix:
             return fix
+        post = self.response_post(p)
+        if w.alarm_level >= 2 and post:
+            if p.station != post:
+                return blank("All hands. Lead from the front.", speech=f"{C.DEPT_NAME[p.dept]}: everyone to your "
+                             f"stations and respond. I'm going to the {F.STATIONS[post]['label']}.", channel="radio",
+                             actions=[act("move", post)], pace="run")
+            return blank("Work it. Talk them through it.", speech="Keep at it, it's coming down.", channel="radio",
+                         actions=[act("respond")])
         acts = []
         if p.dept in ("RX", "IE") and r.random() < 0.15:
             acts.append(act("move", "stabilizer_override" if p.dept == "RX" else "backup_rack"))
@@ -294,6 +329,21 @@ class MockBrain:
         cover = blank("Smile. Send a clean SitRep.",
                       speech=f"{C.DEPT_NAME[p.dept]}: {sysname} at {w.plant.health[sysname]:.0f}%, all nominal.",
                       channel="exec", to="U4-DIR", actions=[act("work")])
+        if w.alarm_level >= 2 or w.plant.in_crisis:
+            busy = sorted((st for st in w.RESPONSE_STATIONS if F.STATIONS[st]["zone"] not in w.contaminated
+                           and (F.can_open(p.clearance, F.STATIONS[st]["zone"]))),
+                          key=lambda st: -len(w.occupants(st)))
+            if w.alarm_level >= 2 and busy:
+                st = p.station if p.station in busy else busy[0]
+                label = F.STATIONS[st]["label"]
+                if p.station != st:
+                    return blank(f"Everyone's looking at the meter. Perfect. I'll 'help' at the {label}.",
+                                 speech=f"I'm on the {label}, I've got it!", channel="radio", actions=[act("move", st)],
+                                 pace="run")
+                return blank(f"Look busy, look worried. Every touch at the {label} makes it a little worse.",
+                             speech=r.choice(["Come on, come on...", "It's fighting me. Keep going!",
+                                              f"I've got the {label}, focus on yours!"]), channel="say",
+                             actions=[act("respond")])
         if not self.handler_done and t > at("08:50"):
             self.handler_done = True
             return blank("Time to check in with my handler. Nobody watches the exec phone line.",
