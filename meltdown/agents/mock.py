@@ -73,6 +73,10 @@ class MockBrain:
         self.skip = {}             # station -> when the saboteur last gave up on it
         self.asked = {}            # director: suspect id -> when we last interviewed them
         self.blame_budget = 1 if self.rng.random() < 0.5 else 0
+        self.pranks = ["Heard the vault door alarm went off last night. Just saying.",
+                       "Word is the canteen is out of pudding. Total cover-up.",
+                       "Somebody told me the turbine hall is haunted. I believe it.",
+                       "Rumour: Corporate's bringing a mascot to the bonus party."]
         self.dir_mem = dict(interviewed=set(), radio_read=set(), cctv={}, inspected={}, corp_msg=False,
                             cross_t=-9999, last_audit=-9999, seen_reports=0)
 
@@ -246,8 +250,8 @@ class MockBrain:
         if p.archetype in ("Literal Robot", "Perfectionist") and p.zone == "Z2" and r.random() < 0.3:
             sh = w.plant.shown(w.t)
             sp, ch = f"Console: heat {sh['heat']:.0f}, stability {sh['stability']:.0f}, incident {sh['incident']:.0f}.", "radio"
-        if p.archetype == "Chaos Prankster" and r.random() < 0.08:
-            sp, ch = "Heard the vault door alarm went off last night. Just saying.", "say"
+        if p.archetype == "Chaos Prankster" and r.random() < 0.08 and self.pranks:
+            sp, ch = self.pranks.pop(), "say"      # made-up gossip for fun; nobody below the Director knows the HR tip
         if p.archetype == "Spooky Mystic" and r.random() < 0.15:
             sp, ch = "Something in this building wants out today.", "say"
         return blank(quirk, speech=sp, channel=ch, actions=[act("work")])
