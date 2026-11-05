@@ -19,7 +19,7 @@ import shutil
 import tempfile
 import time
 
-from ..config import model_for, MODELS, EFFORT
+from ..config import model_for, effort_for, MODELS, EFFORT
 from .base import system_prompt, shared_prompt, decision_schema, actions_for, observation
 from .mock import MockBrain
 
@@ -85,7 +85,7 @@ class ClaudeCodeBrain:
     # one turn ---------------------------------------------------------------------------------------------
     def command(self, p):
         schema = decision_schema(list(actions_for(p).keys()))
-        return [self.exe, "-p", "--model", model_for(p), "--effort", EFFORT[p.tier],
+        return [self.exe, "-p", "--model", model_for(p), "--effort", effort_for(p),
                 "--system-prompt", f"{self.shared}\n\n{system_prompt(self.w, p)}",
                 "--json-schema", json.dumps(schema), "--output-format", "json",
                 "--tools", "", "--strict-mcp-config", "--setting-sources", "project",

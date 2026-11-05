@@ -38,6 +38,10 @@ class HumanDesk:
                          context, f"{saboteur_name} wrote: \"{message}\"\n  Your reply as the handler:",
                          "Stay patient. Hit them when the heat is up, and don't get seen twice in one place.")
 
+    def handler_checkin(self, t, saboteur_name, default_text, context):
+        return self._ask(t, "handler", f"Handler check-in to {saboteur_name} (you are the handler)", context,
+                         f"Message to {saboteur_name} as the handler:", default_text)
+
     def corporate_checkin(self, t, default_text, context):
         return self._ask(t, "corporate", "Corporate check-in (you are CEO Gordon Pike)", context,
                          "Message to the Director as Gordon Pike:", default_text)

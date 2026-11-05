@@ -49,6 +49,7 @@ class Engine:
         self.corp = list(CORPORATE)
         self.handler_count, self.handler_next = 0, 0.0
         self.corp_next = 0.0
+        self.handler_times = [at(c) for c in self.HANDLER_CHECKINS]
         self.log.on_event = self._ticker_event
         self._last_tick_min = -1
         self.wall_start = time.time()
@@ -128,6 +129,7 @@ class Engine:
         while w.t < self.end_t and not w.outcome:
             wall0 = time.time()
             self.corporate()
+            self.handler_checkin()
             for (n, what), ts in list(stage_marks.items()):
                 if w.t >= ts:
                     stage_marks.pop((n, what))
@@ -261,6 +263,26 @@ class Engine:
             text = self.desk.corporate_checkin(w.t, default, self.context())
             w.deliver(w.director.id, "CEO Gordon Pike", f"[corporate] {text}", "corporate", wake=True)
             self.log.event(w.t, "corporate", f"Gordon Pike: {text}", actor="CEO", beat=2)
+
+    HANDLER_CHECKINS = ["08:20", "09:05", "10:05", "11:05"]
+    QUIET_HANDLER = ("Handler. It's {clock} and from out here Unit 4 looks fine. Years of cover were for today, not "
+                     "for next year. You know these people better than anyone. What's your play?")
+    BUSY_HANDLER = "Handler. We're seeing ripples from out here. Good. Keep your head and keep going."
+
+    def handler_checkin(self):
+        """The handler (Travis, or a default line) checks in on the spy now and then, like corporate does."""
+        w = self.world
+        if not self.handler_times or w.t < self.handler_times[0]:
+            return
+        self.handler_times.pop(0)
+        sab = w.people[w.saboteur_id]
+        if sab.detained:
+            return
+        quiet = w.plant.incident < 15 and not any(r["by"] == sab.id for r in w.station_log)
+        default = (self.QUIET_HANDLER if quiet else self.BUSY_HANDLER).format(clock=hhmm(w.t))
+        text = self.desk.handler_checkin(w.t, sab.name, default, self.context())
+        w.deliver(sab.id, "Handler", f"[handler] {text}", "secret", wake=True)
+        self.log.event(w.t, "handler", f"Handler to {sab.first}: {text}", actor=sab.id, public=False, beat=1)
 
     # ---------------------------------------------------------------- turns
     def turns(self):

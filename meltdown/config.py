@@ -12,6 +12,11 @@ def model_for(p) -> str:
 
 
 EFFORT = {"director": "medium", "manager": "low", "staff": "low"}
+SPY_EFFORT = "medium"   # the spy has the hardest job on site: it gets to think as hard as the Director
+
+
+def effort_for(p) -> str:
+    return SPY_EFFORT if getattr(p, "saboteur", False) else EFFORT[p.tier]
 MAX_TOKENS = {"director": 4000, "manager": 3000, "staff": 1500}
 
 SHIFT_START_CLOCK = (8, 0)      # certification window opens 08:00

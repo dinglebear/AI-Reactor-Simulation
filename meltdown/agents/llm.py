@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 
-from ..config import model_for, MODELS, EFFORT, MAX_TOKENS
+from ..config import model_for, effort_for, MODELS, EFFORT, MAX_TOKENS
 from .base import system_prompt, shared_prompt, decision_schema, actions_for, observation
 from .mock import MockBrain
 
@@ -44,7 +44,7 @@ class LLMBrain:
                     {"type": "text", "text": system_prompt(self.w, p)}],
             messages=[{"role": "user", "content": obs}],
             thinking={"type": "adaptive", "display": "summarized"},
-            output_config={"effort": EFFORT[p.tier], "format": {"type": "json_schema", "schema": schema}},
+            output_config={"effort": effort_for(p), "format": {"type": "json_schema", "schema": schema}},
         )
         async with self.sem:
             t0 = time.time()
