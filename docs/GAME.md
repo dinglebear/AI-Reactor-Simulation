@@ -96,10 +96,29 @@ The mock Director interviews the main suspect before an arrest, which is often w
 | inspect station, person | the station log (paper clues) and its current setting; resets it to normal | a staff member walks there and works 60 s |
 | cross_check person | true meters next to the console, every off-normal station, and the rack's log if masked | a staff member works 90 s at the test bench |
 | interview person | testimony, if they choose to tell | they walk to the Director's desk and answer |
-| read_radio dept | radio clues against that department's manager | 90 s |
+| read_radio channel | radio clues against that department's manager, plus the handset log: whose radio was tuned to this channel (RX, HY, IE, SF, exec or security) without belonging there | 90 s |
+| search person | CAS locates them within a minute (cameras, or their badge's last swipe if they're off camera), and the nearest guard who can get there goes to check their pockets: borrowed badges or things they took become a **physical** clue | the call goes out on the security channel, so anyone on it, or listening in, hears who is wanted |
+| search zone | a guard sweeps the room for anything hidden (80% per stash); finds become physical clues against whoever was in the room when it was hidden | 90 s once there |
+
+The Security manager can also call `search` (one investigation every 10 minutes).
 
 `accuse` detains someone. It is **justified** with two different clue types pointing at them. Arresting the
 saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if MELTDOWN was really ≥ 60.
+
+## Sneaking: eavesdropping and hiding things (anyone)
+
+| Action | What it does | How it gets you caught |
+|---|---|---|
+| listen_in channel | your radio also plays another channel (a department, exec or security) for 10 minutes | people next to you may hear the wrong chatter (testimony); radios log which channel each handset is on, so `read_radio` on that channel shows you (radio clue). Restrooms have no signal. |
+| hide | stash borrowed badges (`arg = badges`) or anything else (described in `text`) where you stand | cameras in the room (cctv clue) and anyone nearby (testimony). Off-camera rooms are safer, but a sweep can still find it, and then everyone who was in the room then is a suspect |
+| retrieve | take back what you hid in this room | |
+| rummage | look around the room for anything someone hid | finds become physical clues you hold, and tell the Director if interviewed |
+
+## The spy's read on people
+
+The spy was a manager for years and trained to read people, so their prompt has a private dossier: what each
+person notices, wants and gives way on (by personality), the Director's and managers' pressure points, and a
+handful of the grudges and soft spots between coworkers. It is information, not a plan.
 
 ## Who knows about the spy
 
@@ -217,7 +236,9 @@ when heat or stability are in their danger bands, and it calms slowly when thing
 
 The engine steps every 5 game-seconds. Movement, doors, restroom timers, the plant and investigations all run on
 that clock. Agents take turns on their own cadence (staff ~3 min, managers ~4 min, Director ~5 min) and are woken
-early when someone addresses them, an alarm fires, or they arrive somewhere that matters. In live mode all agents
+early when someone addresses them, an alarm fires, or they arrive somewhere that matters. `--tempo fast` halves
+those gaps and `--tempo max` cuts them to about a third (staff every ~60 s), for when there's plan or API budget
+to spare: everyone reacts faster, at 2-3x the calls per game minute. In live mode all agents
 due at the same moment are called in parallel, and the game clock waits for them.
 
 ## When the game pauses for you
