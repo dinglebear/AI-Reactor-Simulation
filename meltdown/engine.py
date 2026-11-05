@@ -120,7 +120,7 @@ class Engine:
         w.deliver(sab.id, "Handler", HANDLER_BRIEF, "secret")
         next_frame = 0.0
         next_presence = 0.0
-        self.test_warn = sorted((at(c), x) for c, x in self.TEST_WARNINGS)
+        self.test_warn = sorted((at(c), (x, y)) for c, x, y in self.TEST_WARNINGS)
         stage_marks = {(s["n"], "start"): s["start"] for s in STAGES} | {(s["n"], "end"): s["end"] for s in STAGES}
         while w.t < self.end_t and not w.outcome:
             wall0 = time.time()
@@ -215,22 +215,26 @@ class Engine:
         for q in w.people.values():
             w.deliver(q.id, "Building", f"[building alarm] {text}", "alarm", wake=rising and level >= 2)
 
+    # (clock, what the alarm says, what it is). The crew hears an ordinary alarm; the Director has the schedule
+    # and managers know the test plan, so only an announcement tells everyone else it's a test.
     TEST_WARNINGS = [
-        ("08:40", "Stage 1 output ramp: the test rig raises an expected HIGH OUTPUT advisory. This one is part of the test."),
-        ("09:50", "Stage 2: the test rig injects its extra heat load. Expected HIGH HEAT warning on the console."),
-        ("10:10", "Stage 2: second heat pulse from the test rig. Expected HIGH HEAT warning, will clear by itself."),
-        ("10:30", "Stage 2: final heat pulse. Expected HIGH HEAT and LOW MARGIN warnings."),
-        ("11:20", "Stage 3: the test rig runs its stability sweep. Expected STABILITY WOBBLE warning."),
+        ("08:40", "HIGH OUTPUT advisory on the console.", "Stage 1 output ramp, part of the test."),
+        ("09:50", "HIGH HEAT warning on the console.", "Stage 2 extra heat load from the test rig."),
+        ("10:10", "HIGH HEAT warning on the console.", "Stage 2 second heat pulse; clears by itself."),
+        ("10:30", "HIGH HEAT and LOW MARGIN warnings on the console.", "Stage 2 final heat pulse."),
+        ("11:20", "STABILITY WOBBLE warning on the console.", "Stage 3 stability sweep from the test rig."),
     ]
 
     def test_warnings(self):
         w = self.world
         while self.test_warn and w.t >= self.test_warn[0][0]:
-            _, text = self.test_warn.pop(0)
-            self.log.event(w.t, "test_warning", f"[TEST] {text}", beat=1)
+            _, (alarm, what) = self.test_warn.pop(0)
+            self.log.event(w.t, "test_warning", f"[TEST] {alarm} {what}", beat=1)
             for q in w.people.values():
-                if q.zone in ("Z2", "Z6") or q.tier in ("director", "manager"):
-                    w.deliver(q.id, "Test rig", f"[test warning] {text}", "alarm")
+                if q.tier in ("director", "manager"):
+                    w.deliver(q.id, "Test rig", f"[test warning] {alarm} {what}", "alarm")
+                else:
+                    w.deliver(q.id, "Building", f"[building alarm] {alarm}", "alarm")
 
     def frame(self):
         w = self.world

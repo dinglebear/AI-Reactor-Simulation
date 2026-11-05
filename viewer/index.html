@@ -358,7 +358,7 @@ function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
       return html`<g key=${"b" + e.t + e.actor} opacity=${Math.min(1, 1.6 - (t - e.t) / 15)} pointer-events="none">
         <rect x=${bx} y=${by} width=${wdt} height=${hgt} rx=${6 * s} fill="#0b1014ee" stroke=${col}></rect>
         <path d=${`M${a.x - 5 * s} ${by + hgt} L${a.x} ${by + hgt + 7 * s} L${a.x + 5 * s} ${by + hgt}`} fill="#0b1014" stroke=${col}></path>
-        <text x=${a.x} y=${by + hgt / 2 + fs * .35} text-anchor="middle" font-size=${fs} fill="var(--fg)" font-style=${whisper ? "italic" : "normal"}>${e.channel === "radio" || e.channel === "exec" ? "📻 " : ""}${txt}</text></g>`; })}
+        <text x=${a.x} y=${by + hgt / 2 + fs * .35} text-anchor="middle" font-size=${fs} fill="var(--fg)" font-style=${whisper ? "italic" : "normal"}>${e.channel === "pa" ? "📢 " : e.channel === "radio" || e.channel === "exec" ? "📻 " : ""}${txt}</text></g>`; })}
   </svg>`;
 }
 

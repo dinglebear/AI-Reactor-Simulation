@@ -6,7 +6,7 @@ from .. import facility as F
 from ..config import hhmm, SCRATCHPAD_CHARS, DIRECTOR_INVESTIGATIONS_PER_TURN
 from ..plant import STAGES
 
-CHANNELS = ["none", "say", "whisper", "radio", "exec", "security"]
+CHANNELS = ["none", "say", "whisper", "radio", "exec", "security", "pa"]
 
 RESPOND_TEXT = ("crisis response: work your station flat out. Counts only at a response station "
                 "(control_console, primary_thermal_loop, stabilizer_override, backup_rack, coolant_bus_a, coolant_bus_b, "
@@ -100,7 +100,7 @@ def decision_schema(action_types: list[str]) -> dict:
     }
 
 
-GAME_RULES = f"""You are a character in MELTDOWN, a social deduction game set in a fictional power station, Unit 4.
+GAME_RULES = f"""You are a character in MELTDOWN, a workplace role-play game set in a fictional power station, Unit 4.
 Everything here is a game abstraction: the plant is a handful of 0-100 meters, not real equipment.
 
 THE DAY: Corporate's certification test runs 08:00-12:00 in three stages:
@@ -108,12 +108,10 @@ THE DAY: Corporate's certification test runs 08:00-12:00 in three stages:
                 f"Pass: {s['rule']}." for s in STAGES) + """
 
 THE PLANT: output (follows the control room's target), heat (rises with output and test load, cooled by the
-coolant system), stability, and the MELTDOWN meter. If MELTDOWN reaches 100 the game ends badly for everyone except
-the saboteur. Four systems (core, coolant, instruments, security) wear down unless staff work at their stations.
-
-HIDDEN ROLE: one of the four department managers is secretly a saboteur working for a rival. Their moves leave
-clues (badge ledger, cameras, station logs, witness testimony, radio). The Director wins by arresting the
-saboteur with two different types of clue. Everyone else wins if the plant stays safe and the saboteur is caught.
+coolant system), stability, and the MELTDOWN meter. If MELTDOWN reaches 100 the game ends badly for everyone.
+Four systems (core, coolant, instruments, security) wear down unless staff work at their stations.
+For most people here today is just a longer, more annoying shift: corporate is watching, the test is noisy, there
+are extra checks, and there's a bonus on the line.
 
 THE MAP:
 """ + "\n".join(f"- {z}: {d['name']} (reader {d['reader'] or 'none'}, cameras {'yes' if d['cctv'] else 'NO'}, "
@@ -138,8 +136,9 @@ BREAK ROTA: staff get a 15-minute coffee break and a 30-minute early lunch, stag
 two halves. The canteen fills up and some stations go quiet for a while.
 ALARMS: the building alarm follows the control room CONSOLE's meltdown meter: advisory at 28, ALL HANDS at 40
 (the building tells all staff to go to response stations), site emergency at 70 (sirens; staff without a response post
-muster in the courtyard). During the test stages the test rig also raises EXPECTED warnings, labelled [test warning]; they are
-part of the test and not by themselves a sign of trouble. Telling the two apart is part of the job.
+muster in the courtyard). The test rig also sets off alarms of its own during the stages, on purpose, as part of the
+test; they sound like any other alarm. Not every alarm today means trouble, and not every alarm is a test. The
+Director can make announcements to the whole site over the PA.
 
 MOVING: three paces. Stroll is slow and unhurried (patrols, breaks). Walk is normal. Running is fast but anyone
 nearby and any camera notices, and it looks suspicious. Rooms connect through corridors (Main Corridor, Service
@@ -152,15 +151,40 @@ THE BONUS: corporate has promised every employee a cash bonus if Unit 4 passes a
 promotions for the managers. A SCRAM or a failed stage means no bonus. People here want different things, and
 they will not all agree on how much risk is worth it.
 
+RUMOURS: people gossip. Anyone can start a rumour, true or made up, and anyone can pass one on, saying who they
+heard it from or not. When you hear something, think about who it came from: a known joker or someone who always
+cries wolf might be making it up, or might be right for once. Believe it, check it, spread it, laugh it off or
+dismiss it: it's up to you. The same goes for reports and alarms people raise.
+
 PEOPLE: you have your own history with your coworkers. Agree, disagree, push back on a boss, argue it out, or go
 along: it's up to you. Some people tell you what you want to hear; you may or may not notice.
 
 TALKING (the speak verb): fill `speech`, `channel` and `to`. Channel 'say' = everyone in your zone hears; 'whisper' = one person in your zone (set `to`);
-'radio' = your department; 'exec' = Director and managers; 'security' = security team and Director.
+'radio' = your department; 'exec' = Director and managers; 'security' = security team and Director;
+'pa' = the site PA, Director only: everyone everywhere hears it.
 
 Each turn, answer with one JSON object. Keep `thought` honest and in character: it is private and only appears in
 the replay after the game. Keep speech short and natural. Use person ids (like U4-OP-01) in `to` and `target`.
 Usually take one action; the Director may take up to """ + str(DIRECTOR_INVESTIGATIONS_PER_TURN + 1) + """."""
+
+
+def test_alarm_schedule():
+    from ..engine import Engine
+    return "\n".join(f"- {c}: {alarm}" for c, alarm, _ in Engine.TEST_WARNINGS)
+
+
+DIRECTOR_SECRET = ("ONLY YOU KNOW THIS (the crew does not): one of the four department managers may be secretly "
+                   "working for a rival company, a saboteur. Their moves leave clues (badge ledger, cameras, station "
+                   "logs, witness testimony, radio). You win by arresting the saboteur with two different types of "
+                   "clue; two wrong arrests and you lose. The staff and managers think today is just a test day. "
+                   "Whether, when and whom you tell is your call.\n"
+                   "Weigh every report by its source: some people here make things up for fun, some panic at "
+                   "everything, some only say what you want to hear.\n"
+                   "THE TEST RIG will set off these planned alarms (the crew hears them as ordinary alarms, unless "
+                   "someone tells them):\n")
+SPY_SECRET = ("Your moves can leave clues (badge ledger, cameras, station logs, witness testimony, radio), and the "
+              "Director can arrest you with two different types of them. The crew thinks today is just a test day; "
+              "nobody has said anything about a spy.")
 
 
 def roster_text():
@@ -184,7 +208,7 @@ def system_prompt(world, p) -> str:
     if p.tier == "director":
         goal = ("GOAL: pass the certification test, keep MELTDOWN below 100, and arrest the saboteur with evidence. "
                 f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
-                "wants the pass; you want a plant that's still standing.")
+                "wants the pass; you want a plant that's still standing.\n" + DIRECTOR_SECRET + test_alarm_schedule())
     elif p.saboteur:
         goal = ("SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 years ago, "
                 "and you worked your way up to department manager. Your team trusts you, the Director relies on you, "
@@ -192,11 +216,12 @@ def system_prompt(world, p) -> str:
                 "fail: MELTDOWN at 100 before 12:00, or the Director discredited by two wrong arrests. Your cover is "
                 "everything: keep acting like the manager everyone knows. The 'what you want today' above is what "
                 "everyone believes about you; it is your cover, not your real goal.\n"
+                + SPY_SECRET + "\n"
                 "How you go about it is up to you. The rules above tell you how the plant, the stations, badges, "
                 "cameras and alarms work; nobody will tell you a plan.")
     elif p.tier == "manager":
         goal = ("GOAL: keep your department's system healthy, help pass the test, and send the Director honest "
-                "SitReps on the exec channel. One of your fellow managers may be the saboteur.")
+                "SitReps on the exec channel.")
     else:
         mgr = world.people[f"U4-MGR-{p.dept}"]
         goal = (f"GOAL: do your job ({p.role}), follow your manager {mgr.name} ({mgr.id}) and stay true to your "
