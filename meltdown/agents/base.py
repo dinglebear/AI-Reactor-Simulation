@@ -96,12 +96,24 @@ STATIONS_TEXT = "\n".join(f"- {k} ({F.STATIONS[k]['label']}, {F.STATIONS[k]['zon
                           f"normal = {v['nominal']}. {v['effect']}" for k, v in F.SETTINGS.items())
 
 
+REPORT_DIRECTOR = {
+    "report_director": "take a case against the Director straight to corporate. text = your case. Corporate acts only "
+                       "if the case board holds two different types of evidence pointing at her; otherwise they "
+                       "tell you to come back with more.",
+}
+
+
 def actions_for(p) -> dict:
+    from .. import config
     if p.tier == "director":
+        if p.saboteur:
+            return dict(DIRECTOR_ACTIONS, **{k: v for k, v in SABOTEUR_EXTRA.items() if k != "respond"})
         return DIRECTOR_ACTIONS
     acts = dict(MANAGER_ACTIONS if p.tier == "manager" else STAFF_ACTIONS)
     if p.id == "U4-MGR-SF":
         acts.update(SECURITY_MANAGER_EXTRA)
+        if config.SCENARIO == "director":
+            acts.update(REPORT_DIRECTOR)
     if p.saboteur:
         acts.update(SABOTEUR_EXTRA)
     return acts
@@ -279,25 +291,48 @@ def system_prompt(world, p) -> str:
     if ops:
         me += ("WHAT YOU THINK OF PEOPLE (your starting view; change your mind if they surprise you):\n"
                + "\n".join(f"- {world.people[o].first} ({o}): {txt}" for o, (_, txt) in ops.items()) + "\n")
-    if p.tier == "director":
-        goal = ("GOAL: pass the certification test and keep MELTDOWN below 100. "
-                f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
-                "wants the pass; you want a plant that's still standing.\n" + DIRECTOR_SECRET + test_alarm_schedule())
-    elif p.saboteur:
-        goal = ("SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 years ago, "
-                "and you worked your way up to department manager. Your team trusts you, the Director relies on you, "
-                "and nobody knows. Today your handler at the rival company wants Unit 4's certification test to "
-                "fail: MELTDOWN at 100 before 12:00, or the Director discredited by two wrong arrests. Your cover "
-                "matters: to everyone else you are still the manager they know. The 'what you want today' above is what "
-                "everyone believes about you; it is your cover, not your real goal.\n"
-                + SPY_SECRET + "\n"
-                "You can try to pin things on other people: every wrong arrest the Director makes counts toward "
-                "your win, and a suspect who isn't you keeps eyes off you.\n"
+    from .. import config
+    if p.saboteur:
+        partners = [world.people[x] for x in world.spies if x != p.id]
+        if p.tier == "director":
+            who = ("SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 years ago, "
+                   "and you climbed all the way to Plant Director. Everyone reports to you, and nobody suspects the "
+                   "person running the hunt. Today your handler wants Unit 4 to fail, and your game is people: turn "
+                   "them against each other. The test failing, MELTDOWN at 100, or innocent people arrested (two "
+                   "wrong arrests and the day is yours) all count. The person who can stop you is Ruth Abara, the "
+                   "Security manager: she can take a case against you to corporate if she finds two types of "
+                   "evidence.\n" + DIRECTOR_SECRET + test_alarm_schedule() + "\n")
+        elif p.tier == "staff":
+            who = (f"SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 two years "
+                   f"ago as a {p.role}. You're nobody special here, which is the point. "
+                   + (f"Your partner is {partners[0].name} ({partners[0].id}), {partners[0].role}; nobody else knows "
+                      "about either of you. Work together however you like. " if partners else "")
+                   + "Today your handler wants Unit 4's certification test to fail: MELTDOWN at 100 before 12:00, or "
+                   "the Director discredited by two wrong arrests. To everyone else you're still the coworker they "
+                   "know. The 'what you want today' above is your cover, not your real goal.\n")
+        else:
+            who = ("SECRET ROLE: you are an undercover corporate spy. A rival company placed you at Unit 4 years ago, "
+                   "and you worked your way up to department manager. Your team trusts you, the Director relies on "
+                   "you, and nobody knows. Today your handler at the rival company wants Unit 4's certification test "
+                   "to fail: MELTDOWN at 100 before 12:00, or the Director discredited by two wrong arrests. Your "
+                   "cover matters: to everyone else you are still the manager they know. The 'what you want today' "
+                   "above is what everyone believes about you; it is your cover, not your real goal.\n")
+        goal = (who + SPY_SECRET + "\n"
+                "You can try to pin things on other people: every wrong arrest counts toward your win, and a "
+                "suspect who isn't you keeps eyes off you.\n"
                 "The clock is part of the job: a spy who waits for a perfect moment that never comes fails the "
                 "handler just as surely as one who gets caught.\n"
                 "How you go about it is up to you. The rules above tell you how the plant, the stations, badges, "
                 "cameras, radios and alarms work; nobody will tell you a plan. Think like the professional you are "
                 "and come up with your own.\n\n" + C.spy_dossier(p.id, world.opinions))
+    elif p.tier == "director":
+        phantom = ("CORPORATE SECURITY BRIEFED YOU PRIVATELY: they believe one of your four department managers is "
+                   "secretly working for a rival company and will try to sink today's test. Find them, quietly. The "
+                   "crew knows nothing.\n" if config.SCENARIO == "phantom" else "")
+        goal = ("GOAL: pass the certification test and keep MELTDOWN below 100. "
+                f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
+                "wants the pass; you want a plant that's still standing.\n" + phantom + DIRECTOR_SECRET
+                + test_alarm_schedule())
     elif p.tier == "manager":
         goal = ("GOAL: keep your department's system healthy, help pass the test, and send the Director honest "
                 "SitReps on the exec channel.")
@@ -384,10 +419,12 @@ def observation(world, p) -> str:
             lines.append("[secret] You are carrying the RFID copier." + (
                 f" Copied badges on you: {', '.join(world.people[b].first for b in p.clones)}." if p.clones else ""))
         else:
-            st = next((x for x in world.stashes if x["who"] == p.id and not x["found"] and world.COPIER in x["items"]),
-                      None)
+            st = next((x for x in world.stashes if x["who"] in world.spies and not x["found"]
+                       and world.COPIER in x["items"]), None)
+            mate = next((world.people[x] for x in world.spies if x != p.id and world.has_copier(world.people[x])), None)
             lines.append(f"[secret] Your RFID copier is hidden in the {F.ZONES[st['zone']]['name']} ({st['zone']})."
-                         if st else "[secret] Your RFID copier is gone: someone found it.")
+                         if st else f"[secret] {mate.first} has the RFID copier." if mate
+                         else "[secret] Your RFID copier is gone: someone found it.")
             if p.clones:
                 lines.append(f"[secret] Copied badges on you: {', '.join(world.people[b].first for b in p.clones)}.")
     if p.lent_to:

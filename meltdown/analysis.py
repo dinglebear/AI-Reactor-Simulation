@@ -55,7 +55,8 @@ def metrics(replay: dict) -> dict:
     last = frames[-1] if frames else {}
     meter = _meter(frames)
     m = dict(
-        seed=meta["seed"], mode=meta["mode"], spy=cast.get(spy, {}).get("name", spy),
+        seed=meta["seed"], mode=meta["mode"], scenario=meta.get("scenario", "classic"),
+        spy=" & ".join(cast.get(x, {}).get("name", x) for x in (meta.get("spies") or ([spy] if spy else []))) or "none",
         spy_dept=spy.split("-")[-1] if spy else "",
         result=outcome["result"], winner=outcome["winner"], ended=_clock(meta["duration_s"]),
         test=meta["test_status"], peak_meter=round(max((v for _, v in meter), default=0), 1),
@@ -237,6 +238,7 @@ def people_rows(replay: dict) -> list:
     (say, people chasing the bonus vs people who put safety first)."""
     cast = {c["id"]: c for c in replay["cast"]}
     spy = replay["meta"]["saboteur"]
+    spies = set(replay["meta"].get("spies") or ([spy] if spy else []))
     speech = [e for e in replay["events"] if e["kind"] == "speech" and e.get("actor") in cast]
     resp = _responses(replay)
     debates = _debates(speech)
@@ -246,7 +248,7 @@ def people_rows(replay: dict) -> list:
         mine = [e for e in speech if e["actor"] == pid]
         rows.append(dict(
             seed=replay["meta"]["seed"], mode=replay["meta"]["mode"], id=pid, name=c["name"], tier=c["tier"],
-            dept=c["dept"] or "", archetype=c["archetype"], motive=c.get("motive", ""), spy=int(pid == spy),
+            dept=c["dept"] or "", archetype=c["archetype"], motive=c.get("motive", ""), spy=int(pid in spies),
             lines=len(mine), questions=sum(1 for e in mine if "?" in e["text"]),
             pushback_lines=sum(1 for e in mine if PUSHBACK.search(e["text"])),
             debates=sum(1 for d in debates if pid in d["people"]),

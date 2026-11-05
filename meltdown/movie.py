@@ -80,15 +80,33 @@ Answer with the JSON object only."""
 
 
 # ------------------------------------------------------------------ the log, condensed for the writer
+def spies_of(replay: dict) -> list:
+    m = replay["meta"]
+    return list(m.get("spies") or ([m["saboteur"]] if m.get("saboteur") else []))
+
+
+def spy_line(replay: dict, cast: dict) -> str:
+    spies, sc = spies_of(replay), replay["meta"].get("scenario", "classic")
+    if not spies:
+        return ("THE SPY: there is none. Corporate told the Director a manager was a spy, but nobody is. "
+                "The audience knows this from the start; the Director and crew don't.")
+    names = " and ".join(f"{s} {cast[s]['name']}" for s in spies)
+    if sc == "director":
+        return (f"THE SPY (the audience knows from the start; the crew doesn't): the Director herself, {names}, "
+                "trying to turn the crew against each other")
+    return f"THE SPY{'S' if len(spies) > 1 else ''} (the audience knows from the start; the crew doesn't): {names}"
+
+
 def digest(replay: dict) -> str:
     cast = {c["id"]: c for c in replay["cast"]}
-    spy = replay["meta"]["saboteur"]
+    spies = spies_of(replay)
+    spy = spies[0] if spies else None
     zones = replay["zones"]
     o = replay["meta"]["outcome"]
     L = ["CAST (id | name | role | personality | wants)"]
     for c in replay["cast"]:
         L.append(f"{c['id']} | {c['name']} | {c['role']} | {c['personality'].split('. ')[0]} | {c.get('motive', '')}")
-    L += ["", f"THE SPY (the audience knows from the start; the crew doesn't): {spy} {cast[spy]['name']}",
+    L += ["", spy_line(replay, cast),
           f"OUTCOME (for the final scene ONLY; never hint at it earlier): {o['result']}, winner {o['winner']}. {o['text']}", "",
           "ROOMS: " + ", ".join(f"{z} {d['name']}" for z, d in zones.items()), "", "WHAT HAPPENED"]
     for e in replay["events"]:
@@ -108,7 +126,7 @@ def digest(replay: dict) -> str:
             continue
         a = th["agent"]
         near = any(abs(th["t"] - k) <= 240 for k in keytimes)
-        cap = 45 if a == spy else 30 if cast.get(a, {}).get("tier") == "director" else 6 if near else 0
+        cap = 45 if a in spies else 30 if cast.get(a, {}).get("tier") == "director" else 6 if near else 0
         if cap and per.get(a, 0) < cap or (near and per.get(a, 0) < 3):
             per[a] = per.get(a, 0) + 1
             picked.append(f"[{_clock(th['t'])} t={int(th['t'])}] {a} thinks: \"{txt[:220]}\"")
@@ -174,22 +192,31 @@ def _json_in(text):
     return json.loads(text[text.find("{"): text.rfind("}") + 1])
 
 
+def _mock_spy_intro(replay, cast):
+    spies = spies_of(replay)
+    if not spies:
+        return "Except, this time, there isn't one. Only the Director was told otherwise."
+    if replay["meta"].get("scenario") == "director":
+        return f"Nobody here knows it's the Director, {cast[spies[0]]['name']}. You do."
+    return f"Nobody here knows it's {' and '.join(cast[s]['name'] for s in spies)}. You do."
+
+
 def write_mock(replay):
     """Rule-based stand-in: one scene per highlight, with real lines from around that moment."""
     cast = {c["id"]: c for c in replay["cast"]}
-    spy = replay["meta"]["saboteur"]
+    spies = spies_of(replay)
+    spy = spies[0] if spies else None
     o = replay["meta"]["outcome"]
     speech = [e for e in replay["events"] if e["kind"] == "speech" and e.get("actor") in cast]
     scenes = [dict(t=0, zone="", title="Certification day", lines=[
         dict(who="narrator", kind="narration", pause=1.5, text="Unit 4. Certification day. Thirty people on shift, "
              "a bonus on the line, and one manager who has been working for someone else for years."),
-        dict(who="narrator", kind="narration", pause=1, text=f"Nobody here knows it's {cast[spy]['name']}. "
-             "You do.")])]
+        dict(who="narrator", kind="narration", pause=1, text=_mock_spy_intro(replay, cast))])]
     for h in highlights(replay):
         if h["title"] == "How it ended":
             continue
         lines = [dict(who="narrator", kind="narration", pause=0.8, text=h["text"])]
-        near = [e for e in speech if h["t"] - 60 <= e["t"] <= h["t"] + 120 and e["actor"] != spy
+        near = [e for e in speech if h["t"] - 60 <= e["t"] <= h["t"] + 120 and e["actor"] not in spies
                 and "Team reports" not in e["text"]][:2]
         lines += [dict(who=e["actor"], kind="say", pause=0.5, text=e["text"]) for e in near]
         st = next((th for th in replay["thoughts"] if th["agent"] == spy and abs(th["t"] - h["t"]) <= 300
@@ -257,7 +284,8 @@ def script_markdown(movie: dict, replay: dict) -> str:
     """The movie as a readable script, for reading it aloud yourself as the narrator."""
     cast = {c["id"]: c for c in replay["cast"]}
     zones = replay["zones"]
-    spy = replay["meta"]["saboteur"]
+    spies = spies_of(replay)
+    spy = spies[0] if spies else None
     o = replay["meta"]["outcome"]
     who_in = []
     for sc in movie["scenes"]:
@@ -274,7 +302,7 @@ def script_markdown(movie: dict, replay: dict) -> str:
     for pid in who_in:
         c = cast[pid]
         L.append(f"- **{c['name']}**, {c['role']}. {c['personality'].split('. ')[0]}."
-                 + (" *(the spy)*" if pid == spy else ""))
+                 + (" *(the spy)*" if pid in spies else ""))
     L += ["", "---", ""]
     for i, sc in enumerate(movie["scenes"], 1):
         place = zones.get(sc.get("zone") or "", {}).get("name", "Unit 4")

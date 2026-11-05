@@ -90,7 +90,7 @@ class Clue:
 
 
 class World:
-    def __init__(self, seed: int, saboteur_dept: str, log, rng=None):
+    def __init__(self, seed: int, saboteur_dept: str, log, rng=None, scenario="classic"):
         self.rng = rng or random.Random(seed)
         self.log = log
         self.t = 0.0
@@ -113,8 +113,19 @@ class World:
         self.make_rota()
         self.alarm_level = 0
         self.contaminated: list[str] = []
-        self.saboteur_id = f"U4-MGR-{saboteur_dept}"
-        self.people[self.saboteur_id].saboteur = True
+        self.scenario = scenario
+        if scenario == "pair":       # two ordinary staff; never Earl
+            pool = sorted(q.id for q in self.people.values() if q.tier == "staff" and q.id not in C.NEVER_SPY)
+            self.spies = sorted(self.rng.sample(pool, 2))
+        elif scenario == "director":
+            self.spies = ["U4-DIR"]
+        elif scenario == "phantom":
+            self.spies = []
+        else:
+            self.spies = [f"U4-MGR-{saboteur_dept}"]
+        self.saboteur_id = self.spies[0] if self.spies else None
+        for sid in self.spies:
+            self.people[sid].saboteur = True
         self.director = self.people["U4-DIR"]
         self.high_alert = False
         self.manual_target = None
@@ -140,8 +151,9 @@ class World:
         self.test_reports: dict[int, dict] = {}
         self.watched: dict[int, float] = {}  # stage -> seconds the Director spent in the control room during it
         # the spy's contraband: an RFID badge copier, hidden in the Locker Room (no cameras) before the shift
-        self.stashes.append(dict(id="S0", zone=self.COPIER_ZONE, who=self.saboteur_id, t=-86400, badges=[],
-                                 clones=[], items=[self.COPIER], found=False))
+        if self.saboteur_id:
+            self.stashes.append(dict(id="S0", zone=self.COPIER_ZONE, who=self.saboteur_id, t=-86400, badges=[],
+                                     clones=[], items=[self.COPIER], found=False))
 
     # ------------------------------------------------------------------ helpers
     def in_zone(self, zone, exclude=None):
@@ -557,7 +569,7 @@ class World:
                               f"Consistent with: {names}.", actor=by, zone=c.zone, beat=2, clue=c.id)
         for s in c.suspects:
             self.people[s].suspicion += 4
-        if self.saboteur_id in c.suspects:
+        if any(s in c.suspects for s in self.spies):
             self.sab_heat += 6
 
     def case_board(self):
@@ -976,19 +988,32 @@ class World:
         t.waypoints = []
         guard = "U4-SEC-07"
         if t.saboteur:
-            self.outcome = dict(result="CAUGHT", winner="director", justified=justified, evidence=ev,
-                                text=f"{director.first} arrested {t.name}, the saboteur, with "
-                                     f"{'solid' if justified else 'thin'} evidence ({', '.join(ev) or 'none'}).")
-            self.ev("arrest", self.outcome["text"], actor=director.id, zone=t.zone, beat=3, target=t.id,
-                    evidence=ev, correct=True)
+            free = [x for x in self.spies if not self.people[x].detained]
+            self.ev("arrest", f"{director.first} arrested {t.name}, a spy, with {'solid' if justified else 'thin'} "
+                    f"evidence ({', '.join(ev) or 'none'})." + (f" {len(free)} still free." if free else ""),
+                    actor=director.id, zone=t.zone, beat=3, target=t.id, evidence=ev, correct=True)
+            if not free:
+                who = " and ".join(self.people[x].name for x in self.spies)
+                self.outcome = dict(result="CAUGHT", winner="director", justified=justified, evidence=ev,
+                                    text=f"{director.first} arrested {who}, the " + ("spies" if len(self.spies) > 1 else "spy")
+                                         + f", with {'solid' if justified else 'thin'} evidence ({', '.join(ev) or 'none'}).")
         else:
             self.wrong_arrests += 1
             self.ev("arrest", f"{director.first} detained {t.name}, who is innocent (evidence: "
                     f"{', '.join(ev) or 'none'}). Wrong arrests: {self.wrong_arrests}/2.", actor=director.id,
                     zone=t.zone, beat=3, target=t.id, evidence=ev, correct=False)
             if self.wrong_arrests >= 2:
-                self.outcome = dict(result="WRONG_ARRESTS", winner="saboteur",
-                                    text="Two innocent people detained. Corporate pulls the Director off the floor.")
+                if self.scenario == "phantom":
+                    self.outcome = dict(result="WRONG_ARRESTS", winner="nobody",
+                                        text="Two innocent people detained, and there never was a spy. Corporate "
+                                             "pulls the Director off the floor.")
+                elif director.saboteur:
+                    self.outcome = dict(result="WRONG_ARRESTS", winner="saboteur",
+                                        text=f"{director.first} has had two innocent people dragged off. The crew is "
+                                             "at each other's throats, and nobody suspects the Director.")
+                else:
+                    self.outcome = dict(result="WRONG_ARRESTS", winner="saboteur",
+                                        text="Two innocent people detained. Corporate pulls the Director off the floor.")
         self.ev("radio", f"Victor escorts {t.first} to Security.", actor=guard, zone=t.zone)
         return "detained"
 
@@ -1336,7 +1361,8 @@ class World:
                                                              " (there are cameras here)")
 
     def retrieve(self, p: Person):
-        mine = [s for s in self.stashes if s["zone"] == p.zone and s["who"] == p.id and not s["found"]]
+        mine = [s for s in self.stashes if s["zone"] == p.zone and not s["found"]
+                and (s["who"] == p.id or (p.saboteur and self.people[s["who"]].saboteur))]   # partners share
         if not mine:
             return "you have nothing hidden here"
         got = []

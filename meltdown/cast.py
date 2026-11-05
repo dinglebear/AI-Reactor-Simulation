@@ -211,6 +211,7 @@ def opinions(seed: int) -> dict:
 
 # Earl's skeleton key: opens any door without a badge swipe (nothing in the ledger), and lockdowns too.
 KEY_HOLDERS = ("U4-FC-01",)
+NEVER_SPY = ("U4-FC-01",)     # Earl is never the spy, in any mode
 # People who quietly use Earl as their eyes and ears. Shown in their own prompts, and in Earl's.
 EARL_NOTE = {
     "U4-DIR": "Earl Mabry (U4-FC-01), the old janitor, is about the most reliable and trustworthy person on site. "

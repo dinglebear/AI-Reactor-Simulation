@@ -4,6 +4,13 @@ MODELS = {
     "manager": "claude-sonnet-5-5",
     "staff": "claude-haiku-5-5",
 }
+SCENARIO = "classic"   # classic | pair | director | phantom  (set by the engine)
+SCENARIOS = {
+    "classic": "one department manager is the spy",
+    "pair": "two ordinary staff members (Haiku) are spies working together",
+    "director": "the Director is the spy; her game is to turn people against each other and sink the test",
+    "phantom": "the Director is told there is a spy among the managers, but there is none",
+}
 SPY_MODEL = None   # e.g. "claude-opus-5-5" via --spy-model, to give the spy a stronger brain than the other managers
 
 

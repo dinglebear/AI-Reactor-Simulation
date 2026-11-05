@@ -173,6 +173,18 @@ Only the Director and the spy are told a spy may exist. The shared rules every a
 test day and nothing more; managers and staff only learn of a spy if someone tells them (the Director, a rumour, an
 arrest). The CEO's HR tip goes to the Director alone.
 
+## Game modes (`--scenario`)
+
+| Mode | Who is the spy | What changes |
+|---|---|---|
+| `classic` (default) | one department manager | the original game |
+| `pair` | two random staff members (Haiku), never Earl | each knows the other; they share stashed contraband; the Director must arrest both to win |
+| `director` | the Director | her goal is to turn the crew against each other and sink the test (a failed test, MELTDOWN, or two wrong arrests all count); she keeps her lockdown and search powers and gets the spy's tools. Ruth (security chief) can take a case to corporate with `report_director`, which works only with two kinds of evidence against her (20-minute cooldown) |
+| `phantom` | nobody | corporate security privately tells the Director one of the four managers is a spy. Any arrest is a wrongful one; reaching noon with no arrests is the clean result |
+
+Earl (the janitor) can never be the spy in any mode. Run one with, for example,
+`python -m meltdown.run --claude-code --scenario pair`.
+
 ## Rumours and reputations
 
 The rules tell everyone that people gossip, and that a rumour is worth what its source is worth. The Chaos

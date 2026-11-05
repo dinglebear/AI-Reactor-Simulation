@@ -195,8 +195,9 @@ function prep(R) {
   const runs = R.events.filter(e => e.kind === "run");
   let W = 0, H = 0;
   for (const z of Object.values(R.zones)) { W = Math.max(W, z.rect[0] + z.rect[2]); H = Math.max(H, z.rect[1] + z.rect[3]); }
-  const spyMoves = R.events.filter(e => e.actor === R.meta.saboteur && !e.public && SPY_KINDS.has(e.kind) && e.kind !== "spy");
-  return { ...R, castById: cast, ft, speech, runs, duration: R.meta.duration_s, W: W + 40, H: H + 40, spyMoves };
+  const spies = R.meta.spies || (R.meta.saboteur ? [R.meta.saboteur] : []);
+  const spyMoves = R.events.filter(e => spies.includes(e.actor) && !e.public && SPY_KINDS.has(e.kind) && e.kind !== "spy");
+  return { ...R, castById: cast, ft, speech, runs, duration: R.meta.duration_s, W: W + 40, H: H + 40, spyMoves, spies, scenario: R.meta.scenario || "classic" };
 }
 
 function frameIndex(ft, t) { let lo = 0, hi = ft.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ft[mid] <= t) lo = mid; else hi = mid - 1; } return lo; }
@@ -278,7 +279,7 @@ function useCamera(target) {
 /* ---------------------------------------------------------------- map */
 function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
   const { pos, frame, fi } = positions(D, t);
-  const sab = D.meta.saboteur;
+  const sabs = new Set(D.spies);
   const det = new Set(frame.det || []);
   const s = Math.max(0.42, cam.w / D.W);             // keeps labels a steady size on screen when zoomed in
   const speech = layers.comms ? D.speech.filter(e => e.t <= t && t - e.t < 24).slice(-5) : [];
@@ -339,7 +340,7 @@ function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
     ${runs.map((r, i) => { const p = pos[r.actor]; return p ? html`<circle key=${"rn" + i} cx=${p.x} cy=${p.y} r=${14 + (t - r.t) / 2.5} fill="none" stroke="var(--phosphor)" opacity=${1 - (t - r.t) / 60}></circle>` : null; })}
     ${swipes.map((w, i) => { const p = pos[w.holder]; return p ? html`<rect key=${"w" + i} x=${p.x - 11} y=${p.y - 22} width="22" height="7" rx="1" fill=${w.granted ? (w.badge !== w.holder ? "var(--danger)" : "var(--ok)") : "var(--danger)"} opacity=${1 - (t - w.t) / 20}></rect>` : null; })}
     ${speech.map((e, i) => { const a = pos[e.actor], b = e.to && pos[e.to]; return a && b && e.channel !== "exec" && e.channel !== "radio" ? html`<line key=${"sl" + i} x1=${a.x} y1=${a.y} x2=${b.x} y2=${b.y} stroke=${e.channel === "whisper" ? "var(--whisper)" : "var(--talk)"} stroke-dasharray=${e.channel === "whisper" ? "3 3" : ""} opacity=${1 - (t - e.t) / 24}></line>` : null; })}
-    ${Object.entries(pos).map(([id, p]) => { const c = D.castById[id]; const isSab = id === sab && layers.truth; const sel = id === selected; const foc = focusSet.has(id);
+    ${Object.entries(pos).map(([id, p]) => { const c = D.castById[id]; const isSab = sabs.has(id) && layers.truth; const sel = id === selected; const foc = focusSet.has(id);
       const r = c.tier === "director" ? 11 : c.tier === "manager" ? 10 : 8.5;
       return html`<g key=${id} transform=${`translate(${p.x},${p.y})`} style=${{ cursor: "pointer" }} onClick=${() => onSelect(id)}>
         ${foc ? html`<circle r="20" fill="none" stroke="var(--phosphor)" stroke-width="2"><animate attributeName="r" values="15;23;15" dur="1.4s" repeatCount=${reduceMotion ? "0" : "indefinite"}></animate></circle>` : null}
@@ -461,7 +462,9 @@ function Profile({ D, id, onClose, truth }) {
 }
 
 function SpyPanel({ D, t }) {
-  const id = D.meta.saboteur, c = D.castById[id];
+  const id = D.spies[0], c = D.castById[id];
+  if (!c) return html`<section class="panel spypanel"><p class="eyebrow" style=${{ color: "var(--danger)" }}>Spy-cam</p>
+    <div>There is no spy today. Corporate only told the Director there was one.</div></section>`;
   const th = D.thoughts.filter(x => x.agent === id && x.t <= t).slice(-1)[0];
   const said = D.speech.filter(e => e.actor === id && e.t <= t).slice(-1)[0];
   return html`<section class="panel spypanel"><p class="eyebrow" style=${{ color: "var(--danger)" }}>Spy-cam · ${c.name}</p>
@@ -591,9 +594,9 @@ function App({ initial }) {
   if (D) {
     const { pos } = positions(D, t);
     if (mvShot) { if (mvShot.zone && D.zones[mvShot.zone]) { zoomZone = mvShot.zone; target = fitRect(D, D.zones[mvShot.zone].rect, 60); } }
-    else if (reveal) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 160, p.y - 90, 320, 180], 20); }
+    else if (reveal && pos[D.spies[0]]) { const p = pos[D.spies[0]]; target = fitRect(D, [p.x - 160, p.y - 90, 320, 180], 20); }
     else if (caption && caption.zone && D.zones[caption.zone] && !title) { zoomZone = caption.zone; target = fitRect(D, D.zones[caption.zone].rect, 70); }
-    else if (spyCam) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 380, p.y - 210, 760, 420], 0); zoomZone = p.zone; }
+    else if (spyCam && pos[D.spies[0]]) { const p = pos[D.spies[0]]; target = fitRect(D, [p.x - 380, p.y - 210, 760, 420], 0); zoomZone = p.zone; }
     else if (room) { zoomZone = room; target = fitRect(D, D.zones[room].rect, 70); }
   }
   if (mv && D) {   // subtitles sit along the bottom during the movie: frame the shot in the top part of the screen
@@ -668,7 +671,7 @@ function App({ initial }) {
 
   const o = D.meta.outcome; const toggle = (k) => setLayers(l => ({ ...l, [k]: !l[k] }));
   const focus = mvShot && mvShot.focus && mvShot.focus.length ? mvShot.focus : caption ? caption.focus : null;
-  const spy = D.castById[D.meta.saboteur];
+  const spyList = D.spies.map(id => D.castById[id]).filter(Boolean);
   const ended = t >= D.duration - 1;
   const truth = layers.truth || spyCam || reveal;
   const pick = (id) => { setSelected(id); setTab("minds"); };
@@ -704,13 +707,13 @@ function App({ initial }) {
         <div class="kicker">${title.kind === "start" ? "Unit 4 · certification day" : title.clock}</div>
         ${(() => { const st = title.kind === "stage" && D.stages.find(x => title.text.startsWith(`Stage ${x.n}`));
           const h = title.kind === "start" ? "Meltdown" : title.kind === "end" ? "Noon" : st ? `Stage ${st.n}: ${st.name}` : title.title;
-          const sub = title.kind === "start" ? `${D.cast.length} people on shift. One manager has been working for a rival company for years. Today is what they were placed here for.`
+          const sub = title.kind === "start" ? `${D.cast.length} people on shift. ${D.scenario === "phantom" ? "Corporate has told the Director one of the managers is a spy." : D.scenario === "director" ? "The person running the test is working for a rival company, and wants the crew at each other's throats." : D.scenario === "pair" ? "Two of them have been working for a rival company for years. Today is what they were placed here for." : "One manager has been working for a rival company for years. Today is what they were placed here for."}`
             : st && /begins/.test(title.text) ? `Corporate's rule: ${st.rule}.` : title.text;
           return html`<h2>${h}</h2><p>${sub}</p>`; })()}</div></div>` : null}
       ${reveal || (ended && !caption && !title && story === null) ? html`<div class="titlecard reveal" role="status"><div>
         <div class="kicker">${o.result} · ${o.winner === "saboteur" ? "the spy wins" : o.winner === "director" ? "the Director wins" : "nobody wins"}</div>
-        <h2>The spy was ${spy.name}</h2>
-        <p>${spy.role}. ${o.text}</p>
+        <h2>${spyList.length === 0 ? "There never was a spy" : spyList.length > 1 ? "The spies were " + spyList.map(c => c.name).join(" and ") : "The spy was " + spyList[0].name}</h2>
+        <p>${spyList.length ? spyList.map(c => c.role).join(" and ") + ". " : "Corporate's warning was a false alarm. "}${o.text}</p>
         <div class="moves">${D.spyMoves.map((e, i) => html`<div key=${i} onClick=${() => { setReveal(false); setT(e.t); }} style=${{ cursor: "pointer" }}><b>${e.clock}</b>${e.text}</div>`)}</div>
         <div style=${{ marginTop: "14px" }}><button onClick=${() => { setReveal(false); setT(Math.min(t, D.duration - 2)); }}>Back to the map</button></div></div></div>` : null}
       ${mv ? html`<div class="movie-bars" style=${{ position: "absolute", inset: 0, pointerEvents: "none" }}></div>` : null}
