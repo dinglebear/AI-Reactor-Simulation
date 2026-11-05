@@ -85,3 +85,14 @@ class Abilities(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LimitMessages(unittest.TestCase):
+    def test_new_style_limit_message_is_a_limit_with_a_reset_time(self):
+        import datetime as dt
+        from meltdown.agents.claude_code import LIMIT_RE, reset_from_clock
+        msg = "You've hit your 5-hour limit · resets 7:40am (UTC)"
+        self.assertTrue(LIMIT_RE.search(msg))
+        now = dt.datetime(2026, 11, 5, 5, 0, tzinfo=dt.timezone.utc).timestamp()
+        self.assertEqual(reset_from_clock(msg, now) - now, 2 * 3600 + 40 * 60)
+        self.assertFalse(LIMIT_RE.search("claude exited 1"))

@@ -23,11 +23,36 @@ from ..config import MODELS, EFFORT
 from .base import system_prompt, shared_prompt, decision_schema, actions_for, observation
 from .mock import MockBrain
 
-LIMIT_RE = re.compile(r"(usage limit|rate limit|limit reached|hit your limit|limit will reset|resets? (at|in))", re.I)
+LIMIT_RE = re.compile(r"(usage limit|rate limit|limit reached|hit your (\S+ )?limit|limit will reset|resets? (at|in) |"
+                      r"\d-hour limit|weekly limit|resets \d)", re.I)
+RESET_CLOCK_RE = re.compile(r"resets\s+(?:at\s+)?(\d{1,2})(?::(\d\d))?\s*(am|pm)?\s*(?:\(([^)]+)\))?", re.I)
 RESET_EPOCH_RE = re.compile(r"\|(\d{10})\b")         # "Claude AI usage limit reached|1762318800"
 LIMIT_WAIT_S = 600                                    # when the reset time isn't given, look again in 10 minutes
 LIMIT_MIN_WAIT_S = 60
 LIMIT_MAX_WAIT_S = 6 * 3600
+
+
+def reset_from_clock(msg, now=None):
+    """'resets 7:40am (UTC)' -> epoch seconds of the next such time, or None."""
+    import datetime as dt
+    m = RESET_CLOCK_RE.search(msg)
+    if not m:
+        return None
+    h, mi, ap, tzname = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower(), (m.group(4) or "").strip()
+    if ap == "pm" and h < 12:
+        h += 12
+    if ap == "am" and h == 12:
+        h = 0
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(tzname) if tzname else None
+    except Exception:
+        tz = None
+    cur = dt.datetime.fromtimestamp(now or time.time(), tz)
+    at = cur.replace(hour=h % 24, minute=mi, second=0, microsecond=0)
+    if at <= cur:
+        at += dt.timedelta(days=1)
+    return int(at.timestamp())
 
 
 class UsageLimit(Exception):
@@ -80,7 +105,7 @@ class ClaudeCodeBrain:
         if proc.returncode != 0 or res.get("is_error"):
             if LIMIT_RE.search(msg):
                 m = RESET_EPOCH_RE.search(msg)
-                raise UsageLimit(msg.strip()[:200], int(m.group(1)) if m else None)
+                raise UsageLimit(msg.strip()[:200], int(m.group(1)) if m else reset_from_clock(msg))
             raise RuntimeError(msg.strip()[:300] or f"claude exited {proc.returncode}")
         return res
 
@@ -130,8 +155,12 @@ class ClaudeCodeBrain:
 
     async def _one(self, p, obs):
         try:
-            return await self._call(p, obs)
-        except Exception as e:  # bad JSON, CLI error: the game must go on
+            try:
+                return await self._call(p, obs)
+            except (RuntimeError, json.JSONDecodeError):    # a one-off CLI hiccup: try once more
+                await asyncio.sleep(3)
+                return await self._call(p, obs)
+        except Exception as e:  # still failing: the game must go on
             self.usage["fallback_to_mock"] += 1
             return self.mock.decide(p), dict(source="mock-fallback", error=f"{type(e).__name__}: {str(e)[:200]}")
 
