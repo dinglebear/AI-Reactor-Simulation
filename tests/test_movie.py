@@ -25,6 +25,9 @@ class MovieTest(unittest.TestCase):
             self.assertTrue(os.path.exists(page))
             self.assertIn('"movie"', open(page).read())
             self.assertEqual(movie["unverified_quotes"], 0)
+            script = open(os.path.join(run, "script.md")).read()
+            self.assertIn("**NARRATOR:**", script)
+            self.assertIn("## Scene 1", script)
             self.assertEqual(movie["scenes"][-1]["title"], "The reveal")
             ts = [s["t"] for s in movie["scenes"]]
             self.assertEqual(ts, sorted(ts))

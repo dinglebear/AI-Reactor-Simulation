@@ -10,7 +10,8 @@ list of lines: the narrator, people saying things, people's private thoughts, an
 thoughts with the name hidden until the reveal). The viewer reads it aloud with a different voice per person.
 
 The writer may only use what is in the logs: every quoted line must come from what someone said or thought.
-The script is saved as `movie` in replay.json (and as movie.json), then the replay.html is rebuilt.
+The script is saved as `movie` in replay.json (and as movie.json), a readable script.md is written for reading it
+aloud yourself, and the replay.html is rebuilt.
 """
 from __future__ import annotations
 import argparse
@@ -236,6 +237,52 @@ def clean(script: dict, replay: dict, writer: str) -> dict:
                 unverified_quotes=unverified, scenes=out)
 
 
+def script_markdown(movie: dict, replay: dict) -> str:
+    """The movie as a readable script, for reading it aloud yourself as the narrator."""
+    cast = {c["id"]: c for c in replay["cast"]}
+    zones = replay["zones"]
+    spy = replay["meta"]["saboteur"]
+    o = replay["meta"]["outcome"]
+    who_in = []
+    for sc in movie["scenes"]:
+        for ln in sc["lines"]:
+            if ln["who"] in cast and ln["who"] not in who_in:
+                who_in.append(ln["who"])
+    L = [f"# {movie['title']}", "", f"*{movie['logline']}*" if movie.get("logline") else "", "",
+         f"MELTDOWN, seed {replay['meta']['seed']} ({replay['meta']['mode']} game). Ending: {o['result']}. "
+         f"Script by {movie.get('writer', '?')}. Read the **NARRATOR** lines yourself; the others are the "
+         "characters' own words from the game.", "",
+         "Marks: *(beat)* a short silence, *(long beat)* a longer one. *(thinking)* means a private thought. "
+         "*(paraphrased)* means the writer reworded a line it couldn't match word for word in the log.", "",
+         "## Cast", ""]
+    for pid in who_in:
+        c = cast[pid]
+        L.append(f"- **{c['name']}**, {c['role']}. {c['personality'].split('. ')[0]}."
+                 + (" *(the spy: keep it hidden until the last scene)*" if pid == spy else ""))
+    L += ["", "---", ""]
+    for i, sc in enumerate(movie["scenes"], 1):
+        place = zones.get(sc.get("zone") or "", {}).get("name", "Unit 4")
+        L += [f"## Scene {i} · {_clock(sc['t'])} · {place}", f"### {sc['title']}", ""]
+        for ln in sc["lines"]:
+            mark = " *(paraphrased)*" if ln.get("verified") is False else ""
+            if ln["kind"] == "narration":
+                L.append(f"**NARRATOR:** {ln['text']}{mark}")
+            elif ln["kind"] == "secret":
+                L.append(f"**SOMEONE** *(thinking; this is {cast[ln['who']]['name']}, don't say so)*: "
+                         f"{ln['text']}{mark}")
+            else:
+                name = cast.get(ln["who"], {}).get("name", ln["who"]).upper()
+                L.append(f"**{name}**" + (" *(thinking)*" if ln["kind"] == "thought" else "")
+                         + (f": \"{ln['text']}\"" if ln["kind"] == "say" else f": {ln['text']}") + mark)
+            if ln.get("pause", 0) >= 2:
+                L.append("*(long beat)*")
+            elif ln.get("pause", 0) >= 1:
+                L.append("*(beat)*")
+            L.append("")
+        L += ["---", ""]
+    return "\n".join(L)
+
+
 def make_movie(run, writer=None, model=None):
     path = run if run.endswith(".json") else os.path.join(run, "replay.json")
     with open(path) as fh:
@@ -249,6 +296,8 @@ def make_movie(run, writer=None, model=None):
         json.dump(replay, fh, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(os.path.dirname(path), "movie.json"), "w") as fh:
         json.dump(movie, fh, indent=1, ensure_ascii=False)
+    with open(os.path.join(os.path.dirname(path), "script.md"), "w") as fh:
+        fh.write(script_markdown(movie, replay))
     from .viewer import bundle
     html = bundle(path)
     return movie, html
@@ -268,7 +317,8 @@ def main(argv=None):
     n = sum(len(s["lines"]) for s in movie["scenes"])
     print(f"'{movie['title']}': {len(movie['scenes'])} scenes, {n} lines"
           + (f", {movie['unverified_quotes']} quotes not found word-for-word in the log" if movie["unverified_quotes"] else "")
-          + f".\nOpen {html} and press 'Play the movie'.")
+          + f".\nOpen {html} and press 'Play the movie'. The script to read aloud yourself is "
+          f"{os.path.join(os.path.dirname(html), 'script.md')}.")
 
 
 if __name__ == "__main__":

@@ -497,7 +497,7 @@ function useVoices() {
   useEffect(() => { const ss = window.speechSynthesis; if (!ss) return;
     const load = () => { const all = ss.getVoices().filter(v => !NOVELTY.test(v.name));
       const en = all.filter(v => /^en/i.test(v.lang)); const pool = (en.length ? en : all).sort((a, b) => voiceScore(b) - voiceScore(a));
-      setVoices(pool.slice(0, 10)); };
+      setVoices(pool.slice(0, 18)); };
     load(); ss.addEventListener?.("voiceschanged", load); return () => ss.removeEventListener?.("voiceschanged", load); }, []);
   return voices;
 }
@@ -533,6 +533,19 @@ function speak(voices, D, line, on) {
       ss.speak(u); });
   });
   return p.then(() => ({ cancelled }));
+}
+// where the camera looks for each line: at whoever is talking, or at the room the narrator names
+const ROOM_WORDS = [["Z9", /canteen|breakroom|break room|lunch|coffee/], ["Z2", /control room|console|control desk/], ["Z4", /airlock|reactor hall|calibration rack|thermal loop/],
+  ["Z5", /override vault|vault|stabili[sz]er/], ["Z8", /janitor|closet|ventilation shunt|shunt/], ["Z6", /alarm station|\bcas\b|camera/], ["Z3", /turbine|pump bay|coolant bus|test bench/],
+  ["Z1", /lobby|admin|front gate|\bgate\b/], ["Z16", /courtyard|smoking|muster/], ["Z10", /locker/], ["Z12", /records/], ["Z14", /training/], ["Z15", /loading dock/],
+  ["Z11", /storage/], ["Z7N", /restroom|bathroom/]];
+function shotFor(D, sc, line) {
+  if (line.who !== "narrator" && line.kind !== "secret" && D.castById[line.who]) {
+    const p = positions(D, sc.t).pos[line.who]; if (p) return { ...sc, zone: p.zone, focus: [line.who] }; }
+  if (line.who === "narrator") { const low = line.text.toLowerCase();
+    let best = null; for (const [z, re] of ROOM_WORDS) { const m = low.match(re); if (m && D.zones[z] && (!best || m.index < best[1])) best = [z, m.index]; }
+    if (best) return { ...sc, zone: best[0], focus: [] }; }
+  return { ...sc, focus: [] };
 }
 function speakerLabel(D, line, revealed) {
   if (line.who === "narrator") return { name: "Narrator" };
@@ -616,6 +629,7 @@ function App({ initial }) {
       if (!alive) return;
       const ln = sc.lines[mv.line];
       if (!ln) { await sleep(700); if (alive) setMv({ scene: mv.scene + 1, line: 0 }); return; }
+      setMvShot(shotFor(D, sc, ln));
       setMvLine({ ...ln, last: mv.scene === D.movie.scenes.length - 1 });
       await speak(voices, D, ln, voiceOn);
       if (!alive) return;
@@ -647,7 +661,7 @@ function App({ initial }) {
     <div class="screen" style=${{ display: "grid", placeItems: "center" }}><p class="meta">Drop one or more replay.json files here, or open them. Runs are saved in runs/&lt;run id&gt;/replay.json.</p></div>`);
 
   const o = D.meta.outcome; const toggle = (k) => setLayers(l => ({ ...l, [k]: !l[k] }));
-  const focus = caption ? caption.focus : null;
+  const focus = mvShot && mvShot.focus && mvShot.focus.length ? mvShot.focus : caption ? caption.focus : null;
   const spy = D.castById[D.meta.saboteur];
   const ended = t >= D.duration - 1;
   const truth = layers.truth || spyCam || reveal;
