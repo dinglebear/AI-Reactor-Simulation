@@ -18,10 +18,15 @@ class Secrets(unittest.TestCase):
         self.assertIsNone(SPY_WORDS.search(shared_prompt()))
         for p in self.w.people.values():
             text = system_prompt(self.w, p) + observation(self.w, p)
-            if p.tier == "director" or p.saboteur:
+            if p.saboteur:
                 self.assertRegex(text, SPY_WORDS, p.id)
             else:
                 self.assertIsNone(SPY_WORDS.search(text), p.id)
+
+    def test_director_hears_only_about_encrypted_traffic(self):
+        from meltdown.engine import CORPORATE
+        self.assertIn("encrypted traffic", CORPORATE[0][1])
+        self.assertIsNone(SPY_WORDS.search(CORPORATE[0][1]))
 
     def test_director_has_test_alarm_schedule_and_pa(self):
         d = system_prompt(self.w, self.w.director)

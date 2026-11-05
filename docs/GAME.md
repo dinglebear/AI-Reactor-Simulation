@@ -92,20 +92,98 @@ The mock Director interviews the main suspect before an arrest, which is often w
 | Action | Finds | Cost |
 |---|---|---|
 | audit_badges | ledger clues, door alerts | result in 2 min |
-| pull_cctv zone | cctv clues in that zone, run sightings | 1 min; footage may be corrupted if security health < 40 |
+| audit_badges zone | the raw swipes at that room's door, last 30 min (no conclusions: compare them with the cameras yourself) | 1 min |
+| pull_cctv zone | cctv clues in that zone, run sightings, and who came in through the door and when (someone on camera with no swipe of their own badge is for the Director to spot) | 1 min; footage may be corrupted if security health < 40 |
 | inspect station, person | the station log (paper clues) and its current setting; resets it to normal | a staff member walks there and works 60 s |
 | cross_check person | true meters next to the console, every off-normal station, and the rack's log if masked | a staff member works 90 s at the test bench |
 | interview person | testimony, if they choose to tell | they walk to the Director's desk and answer |
-| read_radio dept | radio clues against that department's manager | 90 s |
+| read_radio channel | radio clues against that department's manager, plus the handset log: whose radio was tuned to this channel (RX, HY, IE, SF, exec or security) without belonging there | 90 s |
+| search person | CAS locates them within a minute (cameras, or their badge's last swipe if they're off camera), and the nearest guard who can get there goes to check their pockets: borrowed badges or things they took become a **physical** clue | the call goes out on the security channel, so anyone on it, or listening in, hears who is wanted |
+| search zone | a guard sweeps the room for anything hidden (80% per stash); finds become physical clues against whoever was in the room when it was hidden | 90 s once there |
+
+The Security manager can also call `search` (one investigation every 10 minutes).
 
 `accuse` detains someone. It is **justified** with two different clue types pointing at them. Arresting the
 saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if MELTDOWN was really ≥ 60.
+
+## Sneaking: eavesdropping and hiding things (anyone)
+
+| Action | What it does | How it gets you caught |
+|---|---|---|
+| listen_in channel | your radio also plays another channel (a department, exec or security) for 10 minutes | people next to you may hear the wrong chatter (testimony); radios log which channel each handset is on, so `read_radio` on that channel shows you (radio clue). Restrooms have no signal. |
+| hide | stash borrowed badges (`arg = badges`) or anything else (described in `text`) where you stand | cameras in the room (cctv clue) and anyone nearby (testimony). Off-camera rooms are safer, but a sweep can still find it, and then everyone who was in the room then is a suspect |
+| retrieve | take back what you hid in this room | |
+| rummage | look around the room for anything someone hid | finds become physical clues you hold, and tell the Director if interviewed |
+
+## The spy's contraband: an RFID badge copier
+
+The spy owns a badge copier. It starts hidden in the Locker Room (no cameras), and the spy has to `retrieve` it
+before using it. `clone_badge` copies the badge of someone in the same room. The owner keeps theirs and doesn't
+know. Doors then open for the copy, and the ledger logs the owner's name (an IMPOSSIBLE_LOCATION ledger clue if the
+owner is on camera somewhere else). The moment of copying may be seen by people nearby or caught on camera. If the
+copier is found in a pocket check, it is confiscated along with every copy (a physical clue). A room sweep or a
+rummage can also find it where it's hidden, so the spy decides when to carry it and when to stash it. Only the spy
+is told the copier exists.
+
+## Deleting footage
+
+The spy can `wipe_cctv` a zone from the Director's desk or the alarm station desk, but only if nobody else is
+at that terminal. It deletes the last 30 minutes of that zone's footage: camera clues and door-camera entries. The
+camera system keeps an audit trail of the deletion, which names everyone in the room at the time as suspects, and
+it shows up the next time someone pulls that zone's cameras. People in the room may also see the spy on the camera
+menus.
+
+## The spy's read on people
+
+The spy was a manager for years and trained to read people, so their prompt has a private dossier: what each
+person notices, wants and gives way on (by personality), the Director's and managers' pressure points, and a
+handful of the grudges and soft spots between coworkers. It is information, not a plan.
+
+## The Director's day
+
+The Director organises the certification test: she runs the schedule, watches every stage from the control room
+(the game counts the minutes she's there), and owes corporate a written `test_report` for each stage (at least
+300 characters; it ties her up for about 5 minutes). Her observation shows each stage's watched minutes and whether
+the report is filed.
+
+She is NOT told a spy exists. All she has is the CEO's 08:02 message: HR flagged weird encrypted traffic from a
+mid-level terminal; handle it quietly, don't spook anyone, don't stop the test.
+
+`lockdown on` stops all work (no system upkeep) and seals every door with a reader except for the Director and the
+Security manager. Turning it on needs a full page (600+ characters) of reasons, which goes straight to the CEO, who
+is furious. `lockdown off` lifts it.
+
+## Chores, following, and the janitor
+
+Everyone except the Director has ordinary chores for the day (log readings, walk down the buses, calibration
+checks, patrol rounds, cleaning). They're listed with a station and a due time, and `chore` does one while
+standing at its station (about 3 minutes). Nobody is made to do them; overdue ones just show as OVERDUE.
+
+Anyone can `follow` someone for up to 10 minutes: they keep going where that person goes and are told what the
+person is doing in each room. The person being followed may get the feeling someone is behind them.
+
+Earl Mabry, the custodian, is a 68-year-old Navy veteran with thirty years on site: hard-working, sharp, observant
+and willing to follow someone himself. The spy's dossier marks him as the real threat.
+
+Restrooms have radio now (still no cameras and no badge reader).
 
 ## Who knows about the spy
 
 Only the Director and the spy are told a spy may exist. The shared rules every agent reads describe a long, noisy
 test day and nothing more; managers and staff only learn of a spy if someone tells them (the Director, a rumour, an
 arrest). The CEO's HR tip goes to the Director alone.
+
+## Game modes (`--scenario`)
+
+| Mode | Who is the spy | What changes |
+|---|---|---|
+| `classic` (default) | one department manager | the original game |
+| `pair` | two random staff members (Haiku), never Earl | each knows the other; they share stashed contraband; the Director must arrest both to win |
+| `director` | the Director | her goal is to turn the crew against each other and sink the test (a failed test, MELTDOWN, or two wrong arrests all count); she keeps her lockdown and search powers and gets the spy's tools. Ruth (security chief) can take a case to corporate with `report_director`, which works only with two kinds of evidence against her (20-minute cooldown) |
+| `phantom` | nobody | corporate security privately tells the Director one of the four managers is a spy. Any arrest is a wrongful one; reaching noon with no arrests is the clean result |
+
+Earl (the janitor) can never be the spy in any mode. Run one with, for example,
+`python -m meltdown.run --claude-code --scenario pair`.
 
 ## Rumours and reputations
 
@@ -217,7 +295,9 @@ when heat or stability are in their danger bands, and it calms slowly when thing
 
 The engine steps every 5 game-seconds. Movement, doors, restroom timers, the plant and investigations all run on
 that clock. Agents take turns on their own cadence (staff ~3 min, managers ~4 min, Director ~5 min) and are woken
-early when someone addresses them, an alarm fires, or they arrive somewhere that matters. In live mode all agents
+early when someone addresses them, an alarm fires, or they arrive somewhere that matters. `--tempo fast` halves
+those gaps and `--tempo max` cuts them to about a third (staff every ~60 s), for when there's plan or API budget
+to spare: everyone reacts faster, at 2-3x the calls per game minute. In live mode all agents
 due at the same moment are called in parallel, and the game clock waits for them.
 
 ## When the game pauses for you

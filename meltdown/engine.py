@@ -8,6 +8,7 @@ from . import cast as C
 from . import facility as F
 from .agents.base import actions_for, DIRECTOR_ACTIONS
 from .agents.mock import MockBrain
+from .config import model_for
 from .config import (STEP_S, FRAME_EVERY_S, THINK_EVERY_S, SHIFT_MINUTES, SCRATCHPAD_CHARS, MODELS,
                      DIRECTOR_INVESTIGATIONS_PER_TURN, hhmm, clock, at)
 from .human import HumanDesk
@@ -16,7 +17,7 @@ from .narrator import build_story
 from .plant import stage_at, STAGES
 from .world import World
 
-INVESTIGATIONS = ("audit_badges", "pull_cctv", "inspect", "cross_check", "interview", "read_radio")
+INVESTIGATIONS = ("audit_badges", "pull_cctv", "inspect", "cross_check", "interview", "read_radio", "search")
 
 CORPORATE = [   # default CEO lines (Travis plays Gordon Pike live; batch runs use these)
     (at("08:02"), "Simone, Gordon. Your $250,000 executive bonus rides on a clean pass today. One more thing: HR "
@@ -34,13 +35,17 @@ HANDLER_BRIEF = ("Handler here. Years of cover come down to today. Unit 4 can't 
 class Engine:
     def __init__(self, seed=7, saboteur="random", mode="mock", run_dir="runs/latest", human="auto",
                  speed=0.0, spoilers=False, minutes=SHIFT_MINUTES, quiet=False, log_prompts=False,
-                 concurrency=8):
+                 concurrency=8, exit_interviews=False, scenario="classic"):
         self.rng = random.Random(seed)
         if saboteur == "random":
             saboteur = self.rng.choice(["RX", "HY", "IE", "SF"])
         self.seed, self.sab_dept, self.mode = seed, saboteur, mode
+        self.exit_interviews = exit_interviews
         self.log = RunLog(run_dir, log_prompts=log_prompts)
-        self.world = World(seed, saboteur, self.log, rng=self.rng)
+        from . import config
+        config.SCENARIO = scenario
+        self.scenario = scenario
+        self.world = World(seed, saboteur, self.log, rng=self.rng, scenario=scenario)
         self.brain = MockBrain(self.world) if mode == "mock" else self._live(concurrency)
         self.desk = HumanDesk(human, self.log)
         self.speed, self.spoilers, self.quiet = speed, spoilers, quiet
@@ -48,6 +53,7 @@ class Engine:
         self.corp = list(CORPORATE)
         self.handler_count, self.handler_next = 0, 0.0
         self.corp_next = 0.0
+        self.handler_times = [at(c) for c in self.HANDLER_CHECKINS]
         self.log.on_event = self._ticker_event
         self._last_tick_min = -1
         self.wall_start = time.time()
@@ -55,7 +61,9 @@ class Engine:
     def _live(self, concurrency):
         if self.mode == "claude-code":
             from .agents.claude_code import ClaudeCodeBrain
-            return ClaudeCodeBrain(self.world, concurrency=min(concurrency, 4), say=print)
+            from . import config
+            cap = config.TEMPO[config.TEMPO_NOW]["cc_concurrency"]
+            return ClaudeCodeBrain(self.world, concurrency=min(concurrency, cap), say=print)
         from .agents.llm import LLMBrain
         return LLMBrain(self.world, concurrency=concurrency)
 
@@ -95,29 +103,35 @@ class Engine:
     def context(self):
         w = self.world
         sh, tr = w.plant.shown(w.t), w.plant.true()
-        sab = w.people[w.saboteur_id]
+        spies = ", ".join(f"{w.people[x].name} ({w.people[x].role}) at {w.people[x].station or w.people[x].zone}"
+                          for x in w.spies) or "none (phantom game)"
         return (f"  Clock {hhmm(w.t)} | {w.stage_text()}\n"
                 f"  Console: output {sh['output']:.0f} heat {sh['heat']:.0f} stability {sh['stability']:.0f} "
                 f"incident {sh['incident']:.0f}\n"
                 f"  Truth:   output {tr['output']:.0f} heat {tr['heat']:.0f} stability {tr['stability']:.0f} "
                 f"incident {tr['incident']:.0f}\n"
-                f"  Saboteur: {sab.name} ({C.DEPT_NAME[sab.dept]}), heat {w.sab_heat:.0f}, at {sab.station or sab.zone}\n"
+                f"  Spy: {spies}, heat {w.sab_heat:.0f}\n"
                 f"  Clues found {sum(c.found for c in w.clues)} of {len(w.clues)}; High Alert "
                 f"{'ON' if w.high_alert else 'off'}; wrong arrests {w.wrong_arrests}")
 
     # ---------------------------------------------------------------- main loop
     def run(self):
         w = self.world
-        sab = w.people[w.saboteur_id]
-        self.say(f"MELTDOWN | seed {self.seed} | mode {self.mode} | saboteur {'hidden' if not self.spoilers else sab.name}"
-                 f" | run dir {self.log.dir}")
+        names = ", ".join(w.people[x].name for x in w.spies) or "none"
+        self.say(f"MELTDOWN | seed {self.seed} | mode {self.mode} | scenario {self.scenario} | spy "
+                 f"{'hidden' if not self.spoilers else names} | run dir {self.log.dir}")
         self.log.event(0, "start", f"Certification day at Unit 4. {len(w.people)} people on shift.", beat=2,
-                       saboteur=w.saboteur_id)
-        self.log.event(0, "spy", f"{sab.name}, {sab.role}, is not who everyone thinks. A rival company placed "
-                       f"{sab.first} at Unit 4 years ago, and {sab.first} climbed to manager on merit. Today the "
-                       "cover gets used.", actor=w.saboteur_id, public=False, beat=2)
-        self.log.event(0, "handler", HANDLER_BRIEF, actor=w.saboteur_id, public=False, beat=1)
-        w.deliver(sab.id, "Handler", HANDLER_BRIEF, "secret")
+                       saboteur=w.saboteur_id, spies=w.spies, scenario=self.scenario)
+        for sid in w.spies:
+            sab = w.people[sid]
+            self.log.event(0, "spy", f"{sab.name}, {sab.role}, is not who everyone thinks. A rival company placed "
+                           f"{sab.first} at Unit 4 years ago. Today the cover gets used.", actor=sid, public=False,
+                           beat=2)
+            self.log.event(0, "handler", HANDLER_BRIEF, actor=sid, public=False, beat=1)
+            w.deliver(sab.id, "Handler", HANDLER_BRIEF, "secret")
+        if not w.spies:
+            self.log.event(0, "phantom", "There is no spy today. Only the Director has been told there is one.",
+                           public=False, beat=2)
         next_frame = 0.0
         next_presence = 0.0
         self.test_warn = sorted((at(c), (x, y)) for c, x, y in self.TEST_WARNINGS)
@@ -125,6 +139,7 @@ class Engine:
         while w.t < self.end_t and not w.outcome:
             wall0 = time.time()
             self.corporate()
+            self.handler_checkin()
             for (n, what), ts in list(stage_marks.items()):
                 if w.t >= ts:
                     stage_marks.pop((n, what))
@@ -142,6 +157,7 @@ class Engine:
             w.plant.step(w.t, STEP_S, w.crew(), w.response())
             w.step_contamination()
             w.step_tasks()
+            w.step_director(STEP_S)
             if w.t >= next_presence:
                 w.sample_presence()
                 next_presence = w.t + 30
@@ -156,17 +172,29 @@ class Engine:
             w.t += STEP_S
             if self.speed > 0:
                 time.sleep(max(0.0, STEP_S / self.speed - (time.time() - wall0)))
+        if not w.outcome and self.end_t < at("12:00"):
+            w.outcome = dict(result="CUT_SHORT", winner="nobody",
+                             text=f"Test run stopped at {hhmm(w.t)}, before the shift was over. " + self.spy_line())
         if not w.outcome:
             passed = w.plant.test_passed()
-            w.outcome = dict(result="SHIFT_END", winner="saboteur" if not passed else "nobody",
+            free = [w.people[x].name for x in w.spies if not w.people[x].detained]
+            w.outcome = dict(result="SHIFT_END", winner="saboteur" if (not passed and w.spies) else "nobody",
                              text=("Noon. The test " + ("passed" if passed else "failed") +
-                                   f", and {w.people[w.saboteur_id].name} walked out the gate unidentified."))
+                                   (f", and {' and '.join(free)} walked out the gate unidentified." if free else
+                                    ". There never was a spy." if not w.spies else ".")))
+        if self.exit_interviews and self.mode != "mock" and hasattr(self.brain, "interview_batch"):
+            self.say("Exit interviews ...")
+            for p, ans in zip(list(w.people.values()), self.brain.interview_batch(list(w.people.values()))):
+                if ans:
+                    self.log.event(w.t, "exit_interview", f"{p.first}: suspected {ans.get('suspected')}. "
+                                   f"{ans.get('why', '')} | {ans.get('about_the_day', '')}", actor=p.id,
+                                   public=False, beat=0, suspected=ans.get("suspected"))
         if w.contaminated:
             names = ", ".join(F.ZONES[z]["name"] for z in w.contaminated)
             exposed = sum(1 for q in w.people.values() if q.exposed)
             w.outcome["contaminated"] = list(w.contaminated)
             w.outcome["text"] += f" {names} {'is' if len(w.contaminated) == 1 else 'are'} contaminated; {exposed} people exposed."
-            spy_free = not w.people[w.saboteur_id].detained
+            spy_free = any(not w.people[x].detained for x in w.spies)
             if w.outcome["result"] in ("SHIFT_END", "SCRAM") and spy_free:
                 w.outcome["winner"] = "saboteur"
                 w.outcome["text"] += " The kaboom was stopped, but the damage is done and the spy is still free."
@@ -255,6 +283,33 @@ class Engine:
             w.deliver(w.director.id, "CEO Gordon Pike", f"[corporate] {text}", "corporate", wake=True)
             self.log.event(w.t, "corporate", f"Gordon Pike: {text}", actor="CEO", beat=2)
 
+    HANDLER_CHECKINS = ["08:20", "09:05", "10:05", "11:05"]
+    QUIET_HANDLER = ("Handler. It's {clock} and from out here Unit 4 looks fine. Years of cover were for today, not "
+                     "for next year. You know these people better than anyone. What's your play?")
+    BUSY_HANDLER = "Handler. We're seeing ripples from out here. Good. Keep your head and keep going."
+
+    def handler_checkin(self):
+        """The handler (Travis, or a default line) checks in on the spy now and then, like corporate does."""
+        w = self.world
+        if not self.handler_times or w.t < self.handler_times[0]:
+            return
+        self.handler_times.pop(0)
+        for sid in w.spies:
+            sab = w.people[sid]
+            if sab.detained:
+                continue
+            quiet = w.plant.incident < 15 and not any(r["by"] in w.spies for r in w.station_log)
+            default = (self.QUIET_HANDLER if quiet else self.BUSY_HANDLER).format(clock=hhmm(w.t))
+            text = self.desk.handler_checkin(w.t, sab.name, default, self.context())
+            w.deliver(sab.id, "Handler", f"[handler] {text}", "secret", wake=True)
+            self.log.event(w.t, "handler", f"Handler to {sab.first}: {text}", actor=sab.id, public=False, beat=1)
+
+    def spy_line(self):
+        w = self.world
+        if not w.spies:
+            return "There was no spy."
+        return " and ".join(w.people[x].name for x in w.spies) + (" were the spies." if len(w.spies) > 1 else " was the spy.")
+
     # ---------------------------------------------------------------- turns
     def turns(self):
         w = self.world
@@ -268,10 +323,10 @@ class Engine:
             results = self.brain.decide_batch(due)
         for p, (decision, meta, obs) in zip(due, results):
             res = self.apply(p, decision)
-            self.log.thought(w.t, p.id, MODELS[p.tier] if self.mode != "mock" else f"mock:{p.tier}", decision, res,
+            self.log.thought(w.t, p.id, model_for(p) if self.mode != "mock" else f"mock:{p.tier}", decision, res,
                              meta, obs)
             p.last_think = w.t
-            p.next_think = w.t + THINK_EVERY_S[p.tier] * self.rng.uniform(0.8, 1.2)
+            p.next_think = max(p.busy_until, w.t + THINK_EVERY_S[p.tier] * self.rng.uniform(0.8, 1.2))
 
     def apply(self, p, d):
         """Validate and apply one decision. Returns a list of result strings (fed back next turn)."""
@@ -279,6 +334,13 @@ class Engine:
         allowed = actions_for(p)
         out = []
         p.scratchpad = (d.get("scratchpad") or p.scratchpad)[:SCRATCHPAD_CHARS]
+        plan = (d.get("plan") or "").strip()[:500]
+        if p.saboteur and plan and plan != w.spy_plan:
+            first = not w.spy_plans
+            w.spy_plans.append(dict(t=w.t, plan=plan, why=d.get("thought", "")[:400]))
+            w.spy_plan = plan
+            self.log.event(w.t, "spy_plan", ("Opening plan: " if first else "Plan changed: ") + plan, actor=p.id,
+                           public=False, beat=2 if first else 1, why=d.get("thought", "")[:400])
         pace = d.get("pace") if d.get("pace") in F.SPEEDS else "walk"
         ch = d.get("channel") or "none"
         if d.get("speech") and ch != "none":
@@ -337,6 +399,10 @@ class Engine:
                 return "you can only order your own department"
             if arg not in F.STATIONS:
                 return "arg must be a station name"
+            z = F.STATIONS[arg]["zone"]
+            if not F.reachable(w.clearances(q), z):
+                return (f"{q.first}'s badge ({q.clearance}) can't open the {F.ZONES[z]['name']} ({F.door_rule(z)}). "
+                        "Order not sent.")
             q.order = arg if not arg.startswith("sinks") else None
             w.send(q, arg)
             w.deliver(q.id, p.first, f"[order] Go to {arg}.", "order", wake=True)
@@ -354,6 +420,71 @@ class Engine:
             return r
         if typ == "interact":
             return w.interact(p, tgt, arg.strip().lower())
+        if typ == "listen_in":
+            return w.listen_in(p, tgt or arg)
+        if typ == "hide":
+            return w.hide(p, arg, text)
+        if typ == "report_director":
+            if w.t < getattr(self, "report_next", 0):
+                return "corporate told you to come back with more; try again later"
+            self.report_next = w.t + 1200
+            ev = w.evidence_for("U4-DIR")
+            self.log.event(w.t, "report_director", f"{p.first} took a case against the Director to corporate: "
+                           f"{text[:400]}", actor=p.id, beat=3, evidence=ev)
+            if len(ev) >= 2 and w.director.saboteur:
+                w.director.detained, w.director.activity = True, "detained"
+                w.outcome = dict(result="CAUGHT", winner="crew", justified=True, evidence=ev,
+                                 text=f"{p.first} took the case to corporate, and it held: Director {w.director.name} "
+                                      f"was the spy ({', '.join(ev)}).")
+                self.log.event(w.t, "arrest", w.outcome["text"], actor=p.id, beat=3, target="U4-DIR", correct=True)
+                return "corporate acted: the Director is detained"
+            if len(ev) >= 2:
+                return "corporate looked into it and found nothing; your credibility took a hit"
+            return (f"corporate wants more: the case board holds {', '.join(ev) or 'nothing'} against the Director, "
+                    "and they need two different types of evidence")
+        if typ == "follow":
+            return w.follow(p, tgt, arg)
+        if typ == "chore":
+            return w.do_chore(p, tgt or arg)
+        if typ == "test_report":
+            return w.write_test_report(p, tgt or arg, text)
+        if typ == "lockdown":
+            on = arg.strip().lower() in ("on", "yes", "true", "1")
+            if on == w.lockdown:
+                return f"lockdown is already {'on' if on else 'off'}"
+            if on and len(text or "") < 600:
+                return ("lockdown refused: corporate requires a full page (at least 600 characters) in text "
+                        "explaining exactly why, before the doors seal")
+            w.lockdown = on
+            if on:
+                self.log.event(w.t, "lockdown", f"{p.first} locked the site down. Her reason: {text}", actor=p.id,
+                               beat=3)
+                for q in w.people.values():
+                    if q.id != p.id:
+                        w.deliver(q.id, "PA", "[PA] SITE LOCKDOWN. All work stops. Stay where you are; doors are "
+                                  "sealed except for the Director and the Security manager.", "pa", wake=True)
+                reply = self.desk.corporate_reply(w.t, "LOCKDOWN REPORT: " + text, self.context())
+                w.deliver(p.id, "CEO Gordon Pike", f"[corporate] {reply}", "corporate", wake=True)
+                self.log.event(w.t, "corporate", f"Gordon Pike: {reply}", actor="CEO", beat=2)
+            else:
+                self.log.event(w.t, "lockdown", f"{p.first} lifted the lockdown.", actor=p.id, beat=2)
+                for q in w.people.values():
+                    if q.id != p.id:
+                        w.deliver(q.id, "PA", "[PA] Lockdown lifted. Back to work.", "pa", wake=True)
+            return f"lockdown {'ON' if on else 'off'}"
+        if typ == "wipe_cctv":
+            return w.wipe_cctv(p, tgt)
+        if typ == "clone_badge":
+            return w.clone_badge(p, tgt)
+        if typ == "retrieve":
+            return w.retrieve(p)
+        if typ == "rummage":
+            if p.activity == "moving":
+                return "stop somewhere first"
+            r = w.rummage(p)
+            self.log.event(w.t, "rummage", f"{p.first} looked around the {F.ZONES[p.zone]['name']}: {r}", actor=p.id,
+                           zone=p.zone, public=False, beat=1)
+            return r
         if typ == "ask_badge":
             return w.ask_badge(p, tgt, text or None)
         if typ == "return_badge":
@@ -426,15 +557,16 @@ class Engine:
                              motive=C.motive(a["id"])[0], motive_text=C.motive(a["id"])[1],
                              reputation=C.reputation(a["id"]),
                              opinions={k: dict(feel=f, text=x) for k, (f, x) in w.opinions[a["id"]].items()},
-                             saboteur=a["id"] == w.saboteur_id))
+                             saboteur=a["id"] in w.spies))
         replay = dict(
             meta=dict(game="MELTDOWN", version=1, seed=self.seed, mode=self.mode, saboteur=w.saboteur_id,
+                      spies=w.spies, scenario=self.scenario,
                       outcome=o, grade=grade, test_passed=w.plant.test_passed(),
                       test_status=("passed" if w.plant.test_passed() else "failed") if w.t >= self.end_t - STEP_S
                       else "incomplete", duration_s=w.t,
                       shift_start="08:00", frame_s=FRAME_EVERY_S, models=MODELS,
                       wall_s=round(time.time() - self.wall_start, 1),
-                      usage=getattr(self.brain, "usage", None)),
+                      usage=getattr(self.brain, "usage", None), spy_plans=w.spy_plans),
             zones={k: dict(v) for k, v in F.ZONES.items()},
             doors=[dict(a=a, b=b, xy=xy) for (a, b), xy in F.DOORS.items()],
             stations={k: dict(v) for k, v in F.STATIONS.items()},
@@ -445,9 +577,10 @@ class Engine:
         path = self.log.write_replay(replay)
         self.log.close()
         self.say(f"\n{o['result']}: {o['text']}")
-        self.say(f"Test: " + ", ".join(f"{k} {v['minutes']}/{v['need']} {'PASS' if v['passed'] else 'FAIL'}"
-                                       for k, v in grade.items()))
-        self.say(f"Saboteur was {w.people[w.saboteur_id].name}. Replay: {path}")
+        ran = ", ".join(f"{k} {v['minutes']}/{v['need']} {'PASS' if v['passed'] else 'FAIL'}"
+                        for (k, v), st in zip(grade.items(), STAGES) if st["start"] < self.end_t)
+        self.say(f"Test: {ran or 'no stage started before the run stopped'}")
+        self.say(f"{self.spy_line()} Replay: {path}")
         if getattr(self.brain, "usage", None):
             self.say(f"API usage: {self.brain.usage}")
         return replay

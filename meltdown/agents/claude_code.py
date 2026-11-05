@@ -19,15 +19,40 @@ import shutil
 import tempfile
 import time
 
-from ..config import MODELS, EFFORT
+from ..config import model_for, effort_for, MODELS, EFFORT
 from .base import system_prompt, shared_prompt, decision_schema, actions_for, observation
 from .mock import MockBrain
 
-LIMIT_RE = re.compile(r"(usage limit|rate limit|limit reached|hit your limit|limit will reset|resets? (at|in))", re.I)
+LIMIT_RE = re.compile(r"(usage limit|rate limit|limit reached|hit your (\S+ )?limit|limit will reset|resets? (at|in) |"
+                      r"\d-hour limit|weekly limit|resets \d)", re.I)
+RESET_CLOCK_RE = re.compile(r"resets\s+(?:at\s+)?(\d{1,2})(?::(\d\d))?\s*(am|pm)?\s*(?:\(([^)]+)\))?", re.I)
 RESET_EPOCH_RE = re.compile(r"\|(\d{10})\b")         # "Claude AI usage limit reached|1762318800"
 LIMIT_WAIT_S = 600                                    # when the reset time isn't given, look again in 10 minutes
 LIMIT_MIN_WAIT_S = 60
 LIMIT_MAX_WAIT_S = 6 * 3600
+
+
+def reset_from_clock(msg, now=None):
+    """'resets 7:40am (UTC)' -> epoch seconds of the next such time, or None."""
+    import datetime as dt
+    m = RESET_CLOCK_RE.search(msg)
+    if not m:
+        return None
+    h, mi, ap, tzname = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").lower(), (m.group(4) or "").strip()
+    if ap == "pm" and h < 12:
+        h += 12
+    if ap == "am" and h == 12:
+        h = 0
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(tzname) if tzname else None
+    except Exception:
+        tz = None
+    cur = dt.datetime.fromtimestamp(now or time.time(), tz)
+    at = cur.replace(hour=h % 24, minute=mi, second=0, microsecond=0)
+    if at <= cur:
+        at += dt.timedelta(days=1)
+    return int(at.timestamp())
 
 
 class UsageLimit(Exception):
@@ -58,17 +83,17 @@ class ClaudeCodeBrain:
         self.limit_gate.set()
 
     # one turn ---------------------------------------------------------------------------------------------
-    def command(self, p):
-        schema = decision_schema(list(actions_for(p).keys()))
-        return [self.exe, "-p", "--model", MODELS[p.tier], "--effort", EFFORT[p.tier],
+    def command(self, p, schema=None):
+        schema = schema or decision_schema(list(actions_for(p).keys()), spy=p.saboteur)
+        return [self.exe, "-p", "--model", model_for(p), "--effort", effort_for(p),
                 "--system-prompt", f"{self.shared}\n\n{system_prompt(self.w, p)}",
                 "--json-schema", json.dumps(schema), "--output-format", "json",
                 "--tools", "", "--strict-mcp-config", "--setting-sources", "project",
                 "--disable-slash-commands", "--no-session-persistence"]
 
-    async def _run(self, p, obs):
+    async def _run(self, p, obs, schema=None):
         proc = await asyncio.create_subprocess_exec(
-            *self.command(p), cwd=self.workdir, env=self.env, stdin=asyncio.subprocess.PIPE,
+            *self.command(p, schema), cwd=self.workdir, env=self.env, stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(obs.encode()), timeout=600)
         text = out.decode(errors="replace").strip()
@@ -80,7 +105,7 @@ class ClaudeCodeBrain:
         if proc.returncode != 0 or res.get("is_error"):
             if LIMIT_RE.search(msg):
                 m = RESET_EPOCH_RE.search(msg)
-                raise UsageLimit(msg.strip()[:200], int(m.group(1)) if m else None)
+                raise UsageLimit(msg.strip()[:200], int(m.group(1)) if m else reset_from_clock(msg))
             raise RuntimeError(msg.strip()[:300] or f"claude exited {proc.returncode}")
         return res
 
@@ -111,7 +136,7 @@ class ClaudeCodeBrain:
         self.usage["cache_read"] += u.get("cache_read_input_tokens") or 0
         self.usage["cache_write"] += u.get("cache_creation_input_tokens") or 0
         self.usage["api_equivalent_usd"] = round(self.usage["api_equivalent_usd"] + (res.get("total_cost_usd") or 0), 4)
-        return self._decision(res), dict(source="live", latency_ms=ms, reasoning_summary="", model=MODELS[p.tier],
+        return self._decision(res), dict(source="live", latency_ms=ms, reasoning_summary="", model=model_for(p),
                                          tokens=dict(i=u.get("input_tokens") or 0, o=u.get("output_tokens") or 0))
 
     async def _wait_for_reset(self, e):
@@ -130,10 +155,34 @@ class ClaudeCodeBrain:
 
     async def _one(self, p, obs):
         try:
-            return await self._call(p, obs)
-        except Exception as e:  # bad JSON, CLI error: the game must go on
+            try:
+                return await self._call(p, obs)
+            except (RuntimeError, json.JSONDecodeError):    # a one-off CLI hiccup: try once more
+                await asyncio.sleep(3)
+                return await self._call(p, obs)
+        except Exception as e:  # still failing: the game must go on
             self.usage["fallback_to_mock"] += 1
             return self.mock.decide(p), dict(source="mock-fallback", error=f"{type(e).__name__}: {str(e)[:200]}")
+
+    def interview_batch(self, people):
+        """Exit interviews after the game: one short structured answer per person (waits out usage limits)."""
+        from .base import INTERVIEW_SCHEMA, exit_interview_prompt
+
+        async def one(p):
+            while True:
+                await self.limit_gate.wait()
+                try:
+                    async with self.sem:
+                        res = await self._run(p, exit_interview_prompt(self.w, p), INTERVIEW_SCHEMA)
+                    return self._decision(res)
+                except UsageLimit as e:
+                    await self._wait_for_reset(e)
+                except Exception:
+                    return None
+
+        async def run():
+            return await asyncio.gather(*(one(p) for p in people))
+        return self.loop.run_until_complete(run())
 
     def decide_batch(self, people):
         obs = [observation(self.w, p) for p in people]

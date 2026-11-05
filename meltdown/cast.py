@@ -25,7 +25,7 @@ _S = [  # id, name, job, dept, clearance, zone, station, archetype, group
     ("U4-IE-02", "Sam Oyelaran", "I&E Technician", "IE", "L3", "Z2", "control_console", "Perfectionist", "Analytical"),
     ("U4-IE-03", "Chris Yamada", "I&E Technician", "IE", "L3", "Z3", "test_bench", "People Pleaser", "Compliance"),
     ("U4-IE-04", "Brett Coyle", "I&E Technician", "IE", "L3", "Z4", "primary_thermal_loop", "Brown-Noser", "Compliance"),
-    ("U4-FC-01", "Earl Mabry", "Custodian", "SF", "L1-U", "Z8", None, "Spooky Mystic", "Volatile"),
+    ("U4-FC-01", "Earl Mabry", "Custodian", "SF", "L1-U", "Z8", None, "Veteran Janitor", "Analytical"),
     ("U4-FC-02", "Tina Vasquez", "Custodian", "SF", "L1-U", "Z1", "breakroom", "Bureaucratic Slacker", "Low-Effort"),
     ("U4-SEC-01", "Ray Dunham", "Checkpoint Guard", "SF", "L3-SEC", "Z1", "gate", "Paranoid Skeptic", "Analytical"),
     ("U4-SEC-02", "Benji Carter", "Checkpoint Guard", "SF", "L2-SEC", "Z2", None, "Friendly Optimist", "Compliance"),
@@ -82,6 +82,12 @@ PERSONALITY = {
     # Emotional and volatile group: the drama
     "Panic-Monster": "Frantic. At the first error shouts IN ALL CAPS that everyone is going to die. Runs everywhere, "
                      "escalates everything, cries wolf a lot.",
+    "Veteran Janitor": "Sixty-eight, Navy veteran, thirty years on these floors. The military training never left: "
+                       "he keeps an eye out on purpose and remembers everything around him, who was where, when, "
+                       "and with whom. He isn't afraid to walk up to anyone, ask a plain question and judge the "
+                       "answer. He doesn't gossip and doesn't take chances, and he knows when something is "
+                       "important enough to take to the people in charge. Hard-working, smart, and trusted by "
+                       "everyone. He carries a skeleton key that opens every door on site.",
     "Spooky Mystic": "Cryptic. Treats the reactor like an angry sleeping god and speaks in prophecies about it. "
                      "Weirdly often right about where trouble is.",
     "Hot-Head": "Aggressive and defensive. Blames the other shift for every error and argues hard with orders they "
@@ -151,7 +157,8 @@ REPUTATION_BY_ARCHETYPE = {
     "Hot-Head": "rude and loud, but honest to a fault", "Bureaucratic Slacker": "lazy; never where they should be",
     "People Pleaser": "very kind; would do anything you ask", "Friendly Optimist": "very kind; thinks everything is fine",
     "Literal Robot": "blunt to the point of rude, but always accurate", "Perfectionist": "nitpicky, but catches what others miss",
-    "Brown-Noser": "a suck-up who reports colleagues to look good", "Spooky Mystic": "odd; talks about 'bad energy', weirdly often right",
+    "Brown-Noser": "a suck-up who reports colleagues to look good",
+    "Veteran Janitor": "the old-timer who sees everything; quiet, dependable, nobody's fool", "Spooky Mystic": "odd; talks about 'bad energy', weirdly often right",
     "Quiet Quitter": "checked out; does the minimum",
 }
 REPUTATION = {
@@ -200,3 +207,115 @@ def opinions(seed: int) -> dict:
                 mine[b] = (feel, rep)
         out[a["id"]] = mine
     return out
+
+
+# Earl's skeleton key: opens any door without a badge swipe (nothing in the ledger), and lockdowns too.
+KEY_HOLDERS = ("U4-FC-01",)
+NEVER_SPY = ("U4-FC-01",)     # Earl is never the spy, in any mode
+# People who quietly use Earl as their eyes and ears. Shown in their own prompts, and in Earl's.
+EARL_NOTE = {
+    "U4-DIR": "Earl Mabry (U4-FC-01), the old janitor, is about the most reliable and trustworthy person on site. "
+              "Nobody notices a janitor, he remembers everything, and his skeleton key gets him through any door, "
+              "lockdowns included. If you ever want quiet eyes and ears, he's an option; whether you use him is up "
+              "to you.",
+    "U4-MGR-SF": "Earl Mabry (U4-FC-01), the old janitor, is about the most reliable and trustworthy person you know. "
+                 "His skeleton key gets him through any door, lockdowns included. If you ever want quiet eyes and "
+                 "ears, he's an option; whether you use him is up to you.",
+    "U4-FC-01": "The Director (Simone) and the Security manager (Ruth) trust you completely. When something matters, "
+                "you know you can take it straight to them.",
+}
+
+
+# ---------------------------------------------------------------- the spy's read on people
+# The spy spent years as a manager, trained by the handler to read people. This is information, not a plan:
+# what each kind of person notices, what they want, and where they give. The spy decides what to do with it.
+SPY_READ = {
+    "Paranoid Skeptic": "notices who is where and says it out loud: your most dangerous witness. But they suspect "
+                        "everyone, so management is used to tuning them out, and they will chase any lead you hand them.",
+    "Weary Veteran": "hard to fool on the plant itself and slow to panic. Respects competence, distrusts corporate; "
+                     "will believe a story that blames corporate pressure.",
+    "Daydreamer": "misses what happens in front of them and remembers it hours later, vaguely. A poor witness either way.",
+    "Corporate Yes-Man": "does what the last senior voice told them, without asking why, and repeats it as fact.",
+    "Panic-Monster": "one nudge and they shout it to the whole site. Nobody believes their alarms, which cuts both ways.",
+    "Chaos Prankster": "loves a juicy rumour and spreads it with their own twist. Everyone knows they make things up, "
+                       "so anything traced back to them gets laughed off.",
+    "Hot-Head": "blames the other shift and the other department first; easy to aim, hard to calm. Honest, so "
+                "people believe their anger.",
+    "Bureaucratic Slacker": "away from their post and in the restroom a lot; a natural scapegoat for anything that "
+                            "happened at an empty station.",
+    "People Pleaser": "can't say no to a manager: will lend a badge, leave a station or keep quiet if asked kindly. "
+                      "Feels guilty after and may confess if pressed.",
+    "Friendly Optimist": "assumes the best of everyone, especially managers; reads any alarm as a drill.",
+    "Literal Robot": "reports exact readings and exactly what they saw, to anyone who asks. Cannot be talked round.",
+    "Perfectionist": "chases every small discrepancy until it's explained; a tidy explanation from a manager settles them.",
+    "Brown-Noser": "reports colleagues to look good; feed them a name and it reaches the Director within minutes.",
+    "Veteran Janitor": "old, sharp and invisible: sees who goes where, and acts on it himself.",
+    "Spooky Mystic": "senses trouble and talks in riddles about it. People half-listen, and sometimes they're right.",
+    "Quiet Quitter": "sees plenty, reports nothing unless forced. Won't go out of their way to help anyone.",
+}
+SPY_READ_PERSON = {
+    "U4-FC-01": "Earl Mabry: the real threat on this site. Old Navy man, thirty years on these floors, sees "
+                "everything and says little. His custodian badge opens the Janitor Closet, the control room and the "
+                "pump bay, and nobody notices a janitor. If he gets curious about you he will follow you himself.",
+    "U4-DIR": "Simone Hart: methodical, wants two kinds of proof before she acts, and is under corporate pressure "
+              "she resents. She leans on her managers' SitReps; what the managers tell her shapes where she looks.",
+    "U4-MGR-RX": "Elena Voss: proud and impatient; second-guessing her makes her dig in. Wants the Director's chair.",
+    "U4-MGR-HY": "Frank Delacroix: warm and disorganised, needs the bonus for his daughter's college; will push "
+                 "through a scare rather than lose it.",
+    "U4-MGR-IE": "Mei Lin Park: careful, slow to decide, stops anything that doesn't add up; hates signing numbers she "
+                 "doesn't believe.",
+    "U4-MGR-SF": "Ruth Abara: the most trusted person on site; runs the cameras and guards. Protective of her people, "
+                 "so an accusation against one of them makes her defensive.",
+}
+
+
+def spy_dossier(spy_id: str, ops: dict) -> str:
+    """The spy's private read on everyone, plus the grudges and soft spots they've picked up over the years."""
+    rows = []
+    for a in ALL:
+        if a["id"] == spy_id:
+            continue
+        tag, _ = MOTIVE[a["id"]]
+        read = SPY_READ_PERSON.get(a["id"]) or f"{first(a['name'])}: {SPY_READ[a['archetype']]}"
+        rows.append(f"- {a['id']} {read} Wants: {tag}.")
+    grudges = []
+    for holder, mine in ops.items():
+        if holder == spy_id:
+            continue
+        for other, (feel, txt) in mine.items():
+            if other != spy_id and txt in [t for _, t in TWISTS] and feel in ("warm", "cold"):
+                grudges.append(f"{first(BY_ID[holder]['name'])}'s view of {first(BY_ID[other]['name'])}: \"{txt}\"")
+    import random
+    random.Random(len(grudges)).shuffle(grudges)
+    return ("YOUR READ ON PEOPLE (years of managing them and quietly studying them; nobody knows how well you read "
+            "them):\n" + "\n".join(rows) + "\nWHAT YOU'VE PICKED UP ABOUT WHO LIKES OR RESENTS WHOM:\n- "
+            + "\n- ".join(grudges[:18]))
+
+
+# ---------------------------------------------------------------- chores: everyone's ordinary jobs for the day
+# (name, station, due "HH:MM"). They are just work: nobody is told to do them in any order or at all.
+_MGR_CHORES = [("staff check-ins", None, "09:30"), ("sign the shift paperwork", "records_desk", "11:00")]
+CHORES = {
+    "Control Room Operator": [("log the readings", "control_console", "09:00"),
+                              ("log the readings again", "control_console", "10:30"),
+                              ("restock printer paper", "supply_locker", "11:00")],
+    "Balance-of-Plant Mechanic": [("walk down Bus A", "coolant_bus_a", "09:00"), ("walk down Bus B", "coolant_bus_b", "10:00"),
+                                  ("fetch gaskets", "supply_locker", "11:00")],
+    "I&E Technician": [("calibration check", "display_calibration", "09:30"), ("bench test", "test_bench", "10:30"),
+                       ("file calibration sheets", "records_desk", "11:30")],
+    "Custodian": [("clean the restrooms", "sinks_N", "09:00"), ("empty the canteen bins", "breakroom", "10:00"),
+                  ("mop the control room", "control_console", "10:45"), ("restock the supply locker", "supply_locker", "11:30")],
+    "Checkpoint Guard": [("gate log", "gate", "09:00"), ("lobby round", "admin_office", "10:00"), ("courtyard round", "courtyard", "11:00")],
+    "Patrol Guard": [("locker room round", "lockers", "09:00"), ("loading dock round", "loading_dock", "10:00"),
+                     ("courtyard round", "courtyard", "11:00")],
+    "CAS Monitor": [("camera health check", "cas_desk", "09:00"), ("door alarm review", "cas_desk", "10:30")],
+    "Armory / Rover Guard": [("armory inventory", "cas_desk", "09:30"), ("site round", "courtyard", "10:30")],
+}
+
+
+def chores_for(a) -> list:
+    if a["tier"] == "director":
+        return []
+    if a["tier"] == "manager":
+        return [(n, st or a["station"], due) for n, st, due in _MGR_CHORES]
+    return list(CHORES.get(a["role"], []))

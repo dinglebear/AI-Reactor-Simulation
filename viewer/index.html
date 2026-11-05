@@ -102,7 +102,7 @@ button.spy.on { border-color: var(--danger); color: var(--danger); }
 .caption.note h3 { color: var(--talk); }
 .movie-bars::before, .movie-bars::after { content: ""; position: absolute; left: 0; right: 0; height: 9%; background: #000; z-index: 5; pointer-events: none; }
 .movie-bars::before { top: 0; } .movie-bars::after { bottom: 0; }
-.subtitle { position: absolute; left: 50%; bottom: calc(9% + 18px); transform: translateX(-50%); width: min(760px, calc(100% - 32px)); z-index: 6; text-align: center; pointer-events: none; }
+.subtitle { background: #070b0ecc; border-radius: 8px; padding: 10px 16px; position: absolute; left: 50%; bottom: calc(9% + 10px); transform: translateX(-50%); width: min(760px, calc(100% - 32px)); z-index: 6; text-align: center; pointer-events: none; }
 .subtitle .who { display: inline-flex; align-items: center; gap: 8px; font: 600 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--phosphor); margin-bottom: 6px; }
 .subtitle .who .av { width: 22px; height: 22px; font-size: 10px; }
 .subtitle p { margin: 0; font-size: clamp(16px, 2.2vw, 22px); line-height: 1.4; color: #fff; text-shadow: 0 2px 6px #000, 0 0 2px #000; text-wrap: balance; }
@@ -182,7 +182,7 @@ const first = (n) => n.replace("Dr. ", "").split(" ")[0];
 const initials = (n) => { const p = n.replace("Dr. ", "").split(" "); return (p[0][0] + (p[1] ? p[1][0] : "")).toUpperCase(); };
 const KIND_COLOR = { interact: "#ff5f56", lure: "#ff9f43", blocked: "#f2b544", badge_ask: "#ff9f43", note: "#8fb8ff", badge_lent: "#ff5f56", clue_found: "#f2b544", arrest: "#ffffff",
   stage: "#59c98a", pause: "#8fb8ff", corporate: "#8fb8ff", high_alert: "#f2b544", scram: "#ff5f56", end: "#ffffff", spy: "#ff5f56", plant_alarm: "#ff5f56", contamination: "#d4e02a", test_warning: "#f2b544", break: "#59c98a" };
-const SPY_KINDS = new Set(["spy", "interact", "lure", "blocked", "badge_ask", "badge_lent", "handler_msg"]);
+const SPY_KINDS = new Set(["spy", "interact", "lure", "blocked", "badge_ask", "badge_lent", "handler_msg", "hide", "listen_in", "retrieve", "spy_plan", "clone", "wipe_cctv"]);
 const TITLE_KINDS = new Set(["start", "stage", "end"]);
 const DEPT_ORDER = { null: 0, RX: 1, HY: 2, IE: 3, SF: 4 };
 const PACE = { s: "stroll", w: "walk", r: "run" };
@@ -195,8 +195,9 @@ function prep(R) {
   const runs = R.events.filter(e => e.kind === "run");
   let W = 0, H = 0;
   for (const z of Object.values(R.zones)) { W = Math.max(W, z.rect[0] + z.rect[2]); H = Math.max(H, z.rect[1] + z.rect[3]); }
-  const spyMoves = R.events.filter(e => e.actor === R.meta.saboteur && !e.public && SPY_KINDS.has(e.kind) && e.kind !== "spy");
-  return { ...R, castById: cast, ft, speech, runs, duration: R.meta.duration_s, W: W + 40, H: H + 40, spyMoves };
+  const spies = R.meta.spies || (R.meta.saboteur ? [R.meta.saboteur] : []);
+  const spyMoves = R.events.filter(e => spies.includes(e.actor) && !e.public && SPY_KINDS.has(e.kind) && e.kind !== "spy");
+  return { ...R, castById: cast, ft, speech, runs, duration: R.meta.duration_s, W: W + 40, H: H + 40, spyMoves, spies, scenario: R.meta.scenario || "classic" };
 }
 
 function frameIndex(ft, t) { let lo = 0, hi = ft.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ft[mid] <= t) lo = mid; else hi = mid - 1; } return lo; }
@@ -278,7 +279,7 @@ function useCamera(target) {
 /* ---------------------------------------------------------------- map */
 function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
   const { pos, frame, fi } = positions(D, t);
-  const sab = D.meta.saboteur;
+  const sabs = new Set(D.spies);
   const det = new Set(frame.det || []);
   const s = Math.max(0.42, cam.w / D.W);             // keeps labels a steady size on screen when zoomed in
   const speech = layers.comms ? D.speech.filter(e => e.t <= t && t - e.t < 24).slice(-5) : [];
@@ -313,7 +314,7 @@ function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
         ${(frame.cz || []).includes(z) ? html`<g pointer-events="none"><rect x=${x} y=${y} width=${w} height=${h} rx="4" fill="url(#hazard)" stroke="#d4e02a" stroke-width="3"></rect>
           <text x=${x + w / 2} y=${y + h / 2} text-anchor="middle" fill="#e6f04a" font-size=${14 * s} font-weight="700" letter-spacing=".12em" paint-order="stroke" stroke="#070b0e" stroke-width="4">☢ CONTAMINATED · SEALED</text></g>` : null}
         ${kind !== "hall" || w > h ? html`<text x=${x + 8} y=${y + 8 + 9 * s} fill=${kind === "hall" ? "#4f6470" : "#9fb2ba"} font-size=${(kind === "hall" ? 10 : 12) * s} font-weight="600" letter-spacing=".08em">${d.name.toUpperCase()}</text>` : null}
-        ${layers.cctv && d.cctv ? html`<g><circle cx=${x + w - 12} cy=${y + 12} r="4" fill="var(--danger)" opacity=".85"></circle><path d=${`M${x + w - 12} ${y + 12} l-16 10 l6 6 z`} fill="var(--danger)" opacity=".12"></path></g>` : null}
+        ${layers.cctv && d.cctv ? html`<g><path d=${`M${x + w - 14} ${y + 14} l${-46 * s} ${26 * s} l${16 * s} ${18 * s} z`} fill="var(--danger)" opacity=".16"></path><rect x=${x + w - 14 - 7 * s} y=${y + 14 - 5 * s} width=${14 * s} height=${10 * s} rx=${2 * s} fill="var(--danger)" opacity=".9"></rect><circle cx=${x + w - 14} cy=${y + 14} r=${2.6 * s} fill="#070b0e"></circle></g>` : null}
         ${layers.cctv && !d.cctv && kind !== "hall" ? html`<text x=${x + 8} y=${y + h - 8} fill="#c9a2d6" font-size=${10 * s}>NO CAMERAS${d.radio ? "" : " · NO RADIO"}</text>` : null}
       </g>`; })}
     ${D.doors.map(dr => { const za = D.zones[dr.a], zb = D.zones[dr.b]; const reader = za.reader || zb.reader;
@@ -339,7 +340,7 @@ function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
     ${runs.map((r, i) => { const p = pos[r.actor]; return p ? html`<circle key=${"rn" + i} cx=${p.x} cy=${p.y} r=${14 + (t - r.t) / 2.5} fill="none" stroke="var(--phosphor)" opacity=${1 - (t - r.t) / 60}></circle>` : null; })}
     ${swipes.map((w, i) => { const p = pos[w.holder]; return p ? html`<rect key=${"w" + i} x=${p.x - 11} y=${p.y - 22} width="22" height="7" rx="1" fill=${w.granted ? (w.badge !== w.holder ? "var(--danger)" : "var(--ok)") : "var(--danger)"} opacity=${1 - (t - w.t) / 20}></rect>` : null; })}
     ${speech.map((e, i) => { const a = pos[e.actor], b = e.to && pos[e.to]; return a && b && e.channel !== "exec" && e.channel !== "radio" ? html`<line key=${"sl" + i} x1=${a.x} y1=${a.y} x2=${b.x} y2=${b.y} stroke=${e.channel === "whisper" ? "var(--whisper)" : "var(--talk)"} stroke-dasharray=${e.channel === "whisper" ? "3 3" : ""} opacity=${1 - (t - e.t) / 24}></line>` : null; })}
-    ${Object.entries(pos).map(([id, p]) => { const c = D.castById[id]; const isSab = id === sab && layers.truth; const sel = id === selected; const foc = focusSet.has(id);
+    ${Object.entries(pos).map(([id, p]) => { const c = D.castById[id]; const isSab = sabs.has(id) && layers.truth; const sel = id === selected; const foc = focusSet.has(id);
       const r = c.tier === "director" ? 11 : c.tier === "manager" ? 10 : 8.5;
       return html`<g key=${id} transform=${`translate(${p.x},${p.y})`} style=${{ cursor: "pointer" }} onClick=${() => onSelect(id)}>
         ${foc ? html`<circle r="20" fill="none" stroke="var(--phosphor)" stroke-width="2"><animate attributeName="r" values="15;23;15" dur="1.4s" repeatCount=${reduceMotion ? "0" : "indefinite"}></animate></circle>` : null}
@@ -352,13 +353,16 @@ function MapView({ D, t, layers, selected, onSelect, focus, cam, onRoom }) {
         ${(frame.ex || []).includes(id) ? html`<g transform=${`translate(${-r - 4},${-r - 2})`}><circle r="5" fill="#d4e02a"></circle><text y="3" text-anchor="middle" font-size="7" fill="#070b0e">☢</text></g>` : null}
         ${layers.names || sel || foc ? html`<text x="0" y=${-r - 5} text-anchor="middle" fill="var(--fg)" font-size=${10 * s} paint-order="stroke" stroke="#070b0e" stroke-width="3">${first(c.name)}</text>` : null}
       </g>`; })}
+    ${speech.filter(e => ["radio", "exec", "security", "pa"].includes(e.channel) && t - e.t < 6).map((e, i) => { const a = pos[e.actor]; if (!a) return null;
+      const k = (t - e.t) / 6; const col = e.channel === "pa" ? "var(--phosphor)" : "#9fc3d1";
+      return html`<g key=${"rw" + e.t + e.actor} pointer-events="none" opacity=${1 - k}>${[0, 1, 2].map(j => html`<circle key=${j} cx=${a.x} cy=${a.y} r=${(14 + j * 10 + k * 24) * Math.max(1, s)} fill="none" stroke=${col} stroke-width="2"></circle>`)}</g>`; })}
     ${speech.map((e, i) => { const a = pos[e.actor]; if (!a) return null; const txt = e.text.length > 64 ? e.text.slice(0, 62) + "…" : e.text;
       const fs = 10.5 * s, wdt = Math.min(320 * s, (txt.length * fs * .58) + 14 * s), hgt = fs + 12 * s; const bx = a.x - wdt / 2, by = a.y - 22 - hgt - i * 0;
       const whisper = e.channel === "whisper"; const col = whisper ? "var(--whisper)" : e.channel === "say" ? "var(--talk)" : "#7f949d";
       return html`<g key=${"b" + e.t + e.actor} opacity=${Math.min(1, 1.6 - (t - e.t) / 15)} pointer-events="none">
         <rect x=${bx} y=${by} width=${wdt} height=${hgt} rx=${6 * s} fill="#0b1014ee" stroke=${col}></rect>
         <path d=${`M${a.x - 5 * s} ${by + hgt} L${a.x} ${by + hgt + 7 * s} L${a.x + 5 * s} ${by + hgt}`} fill="#0b1014" stroke=${col}></path>
-        <text x=${a.x} y=${by + hgt / 2 + fs * .35} text-anchor="middle" font-size=${fs} fill="var(--fg)" font-style=${whisper ? "italic" : "normal"}>${e.channel === "pa" ? "📢 " : e.channel === "radio" || e.channel === "exec" ? "📻 " : ""}${txt}</text></g>`; })}
+        <text x=${a.x} y=${by + hgt / 2 + fs * .35} text-anchor="middle" font-size=${fs} fill="var(--fg)" font-style=${whisper ? "italic" : "normal"}>${e.channel === "pa" ? "📢 PA: " : e.channel === "radio" ? "📻 " : e.channel === "exec" ? "📻 exec: " : e.channel === "security" ? "📻 security: " : ""}${txt}</text></g>`; })}
   </svg>`;
 }
 
@@ -458,7 +462,9 @@ function Profile({ D, id, onClose, truth }) {
 }
 
 function SpyPanel({ D, t }) {
-  const id = D.meta.saboteur, c = D.castById[id];
+  const id = D.spies[0], c = D.castById[id];
+  if (!c) return html`<section class="panel spypanel"><p class="eyebrow" style=${{ color: "var(--danger)" }}>Spy-cam</p>
+    <div>There is no spy today. Corporate only told the Director there was one.</div></section>`;
   const th = D.thoughts.filter(x => x.agent === id && x.t <= t).slice(-1)[0];
   const said = D.speech.filter(e => e.actor === id && e.t <= t).slice(-1)[0];
   return html`<section class="panel spypanel"><p class="eyebrow" style=${{ color: "var(--danger)" }}>Spy-cam · ${c.name}</p>
@@ -540,18 +546,19 @@ const ROOM_WORDS = [["Z9", /canteen|breakroom|break room|lunch|coffee/], ["Z2", 
   ["Z1", /lobby|admin|front gate|\bgate\b/], ["Z16", /courtyard|smoking|muster/], ["Z10", /locker/], ["Z12", /records/], ["Z14", /training/], ["Z15", /loading dock/],
   ["Z11", /storage/], ["Z7N", /restroom|bathroom/]];
 function shotFor(D, sc, line) {
-  if (line.who !== "narrator" && line.kind !== "secret" && D.castById[line.who]) {
+  if (line.who !== "narrator" && D.castById[line.who]) {
     const p = positions(D, sc.t).pos[line.who]; if (p) return { ...sc, zone: p.zone, focus: [line.who] }; }
   if (line.who === "narrator") { const low = line.text.toLowerCase();
     let best = null; for (const [z, re] of ROOM_WORDS) { const m = low.match(re); if (m && D.zones[z] && (!best || m.index < best[1])) best = [z, m.index]; }
     if (best) return { ...sc, zone: best[0], focus: [] }; }
   return { ...sc, focus: [] };
 }
-function speakerLabel(D, line, revealed) {
+const CHANNEL_TAG = { radio: "📻 on the radio", exec: "📻 exec channel", security: "📻 security channel", pa: "📢 over the PA", whisper: "whispering" };
+function speakerLabel(D, line) {
   if (line.who === "narrator") return { name: "Narrator" };
   const c = D.castById[line.who];
-  if (line.kind === "secret" && !revealed) return { name: "Someone, thinking", hidden: true };
-  return { name: (c ? first(c.name) : line.who) + (line.kind === "thought" || line.kind === "secret" ? ", thinking" : ""), c };
+  const tag = line.kind === "say" && CHANNEL_TAG[line.channel] ? " · " + CHANNEL_TAG[line.channel] : "";
+  return { name: (c ? first(c.name) : line.who) + (line.kind === "thought" || line.kind === "secret" ? ", thinking" : "") + tag, c };
 }
 
 function App({ initial }) {
@@ -587,11 +594,13 @@ function App({ initial }) {
   if (D) {
     const { pos } = positions(D, t);
     if (mvShot) { if (mvShot.zone && D.zones[mvShot.zone]) { zoomZone = mvShot.zone; target = fitRect(D, D.zones[mvShot.zone].rect, 60); } }
-    else if (reveal) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 160, p.y - 90, 320, 180], 20); }
+    else if (reveal && pos[D.spies[0]]) { const p = pos[D.spies[0]]; target = fitRect(D, [p.x - 160, p.y - 90, 320, 180], 20); }
     else if (caption && caption.zone && D.zones[caption.zone] && !title) { zoomZone = caption.zone; target = fitRect(D, D.zones[caption.zone].rect, 70); }
-    else if (spyCam) { const p = pos[D.meta.saboteur]; target = fitRect(D, [p.x - 380, p.y - 210, 760, 420], 0); zoomZone = p.zone; }
+    else if (spyCam && pos[D.spies[0]]) { const p = pos[D.spies[0]]; target = fitRect(D, [p.x - 380, p.y - 210, 760, 420], 0); zoomZone = p.zone; }
     else if (room) { zoomZone = room; target = fitRect(D, D.zones[room].rect, 70); }
   }
+  if (mv && D) {   // subtitles sit along the bottom during the movie: frame the shot in the top part of the screen
+    target = { x: target.x - target.w * 0.2, y: target.y - target.h * 0.12, w: target.w * 1.4, h: target.h * 1.4 }; }
   const cam = useCamera(target);
 
   useEffect(() => { if (!playing || !D) return; let raf, last = performance.now();
@@ -662,7 +671,7 @@ function App({ initial }) {
 
   const o = D.meta.outcome; const toggle = (k) => setLayers(l => ({ ...l, [k]: !l[k] }));
   const focus = mvShot && mvShot.focus && mvShot.focus.length ? mvShot.focus : caption ? caption.focus : null;
-  const spy = D.castById[D.meta.saboteur];
+  const spyList = D.spies.map(id => D.castById[id]).filter(Boolean);
   const ended = t >= D.duration - 1;
   const truth = layers.truth || spyCam || reveal;
   const pick = (id) => { setSelected(id); setTab("minds"); };
@@ -670,7 +679,7 @@ function App({ initial }) {
     <header>
       <h1>Unit <span>4</span> Replay</h1>
       ${runs.length > 1 ? html`<select aria-label="Pick a run" value=${ri} onChange=${e => { setRi(+e.target.value); setT(0); setStory(null); setCaption(null); setTitle(null); setReveal(false); setSelected(null); }}>
-        ${runs.map((r, i) => html`<option key=${i} value=${i}>seed ${r.meta.seed} · ${r.meta.mode} · ${r.meta.outcome.result}</option>`)}</select>` : null}
+        ${runs.map((r, i) => html`<option key=${i} value=${i}>seed ${r.meta.seed} · ${r.meta.mode}</option>`)}</select>` : null}
       <span class="meta">seed ${D.meta.seed} · ${D.meta.mode} · ${D.cast.length} agents · ${D.thoughts.length} turns</span>
       ${ended || truth ? html`<span class=${"outcome " + o.winner}>${o.result} · ${o.winner === "saboteur" ? "spy" : o.winner} wins</span>` : html`<span class="outcome">outcome hidden until the end</span>`}
       <span class="spacer"></span>
@@ -698,20 +707,20 @@ function App({ initial }) {
         <div class="kicker">${title.kind === "start" ? "Unit 4 · certification day" : title.clock}</div>
         ${(() => { const st = title.kind === "stage" && D.stages.find(x => title.text.startsWith(`Stage ${x.n}`));
           const h = title.kind === "start" ? "Meltdown" : title.kind === "end" ? "Noon" : st ? `Stage ${st.n}: ${st.name}` : title.title;
-          const sub = title.kind === "start" ? `${D.cast.length} people on shift. One manager has been working for a rival company for years. Today is what they were placed here for.`
+          const sub = title.kind === "start" ? `${D.cast.length} people on shift. ${D.scenario === "phantom" ? "Corporate has told the Director one of the managers is a spy." : D.scenario === "director" ? "The person running the test is working for a rival company, and wants the crew at each other's throats." : D.scenario === "pair" ? "Two of them have been working for a rival company for years. Today is what they were placed here for." : "One manager has been working for a rival company for years. Today is what they were placed here for."}`
             : st && /begins/.test(title.text) ? `Corporate's rule: ${st.rule}.` : title.text;
           return html`<h2>${h}</h2><p>${sub}</p>`; })()}</div></div>` : null}
       ${reveal || (ended && !caption && !title && story === null) ? html`<div class="titlecard reveal" role="status"><div>
         <div class="kicker">${o.result} · ${o.winner === "saboteur" ? "the spy wins" : o.winner === "director" ? "the Director wins" : "nobody wins"}</div>
-        <h2>The spy was ${spy.name}</h2>
-        <p>${spy.role}. ${o.text}</p>
+        <h2>${spyList.length === 0 ? "There never was a spy" : spyList.length > 1 ? "The spies were " + spyList.map(c => c.name).join(" and ") : "The spy was " + spyList[0].name}</h2>
+        <p>${spyList.length ? spyList.map(c => c.role).join(" and ") + ". " : "Corporate's warning was a false alarm. "}${o.text}</p>
         <div class="moves">${D.spyMoves.map((e, i) => html`<div key=${i} onClick=${() => { setReveal(false); setT(e.t); }} style=${{ cursor: "pointer" }}><b>${e.clock}</b>${e.text}</div>`)}</div>
         <div style=${{ marginTop: "14px" }}><button onClick=${() => { setReveal(false); setT(Math.min(t, D.duration - 2)); }}>Back to the map</button></div></div></div>` : null}
       ${mv ? html`<div class="movie-bars" style=${{ position: "absolute", inset: 0, pointerEvents: "none" }}></div>` : null}
       ${mv && mvLine && mvLine.intro ? html`<div class="titlecard" role="status"><div><div class="kicker">A MELTDOWN film · seed ${D.meta.seed}</div>
         <h2>${D.movie.title}</h2><p>${D.movie.logline}</p></div></div>` : null}
       ${mv && mvShot && mvShot.title ? html`<div class="scene-tag">${clockOf(mvShot.t).slice(0, 5)} · ${mvShot.title}</div>` : null}
-      ${mv && mvLine && !mvLine.intro ? (() => { const lab = speakerLabel(D, mvLine, mvLine.last);
+      ${mv && mvLine && !mvLine.intro ? (() => { const lab = speakerLabel(D, mvLine);
         return html`<div class=${"subtitle " + mvLine.kind} role="status" aria-live="polite"><div class="who">
           ${lab.c && !lab.hidden ? html`<span class="av" style=${{ background: lab.c.color }}>${initials(lab.c.name)}</span>` : null}${lab.name}</div>
           <p>${mvLine.kind === "say" ? "“" + mvLine.text + "”" : mvLine.text}</p>

@@ -52,6 +52,13 @@ class Person:
     pending: dict | None = None    # e.g. badge request or interview question waiting for an answer
     last_badge: str | None = None  # badge used on the last door; stations log changes under it
     order: str | None = None       # last order from a manager / Director
+    listening: dict = field(default_factory=dict)  # channel -> until (eavesdropping on a channel that isn't yours)
+    carrying: list = field(default_factory=list)   # small things picked up or taken (not badges)
+    clones: list = field(default_factory=list)     # badge ids copied with the RFID copier (the owner keeps theirs)
+    chores: list = field(default_factory=list)     # [{name, station, due, done}]
+    chore_until: float = 0.0
+    following: dict | None = None                  # {who, until, seen}
+    busy_until: float = 0.0                        # e.g. the Director writing a test report
 
     @property
     def first(self):
@@ -59,10 +66,12 @@ class Person:
 
     @property
     def model(self):
-        return MODELS[self.tier]
+        from .config import model_for
+        return model_for(self)
 
     def holds(self):
-        return ([self.badge] if self.badge else []) + list(self.extra_badges)
+        return ([self.badge] if self.badge else []) + list(self.extra_badges) + [c for c in self.clones
+                                                                                 if c not in self.extra_badges]
 
 
 @dataclass
@@ -81,7 +90,7 @@ class Clue:
 
 
 class World:
-    def __init__(self, seed: int, saboteur_dept: str, log, rng=None):
+    def __init__(self, seed: int, saboteur_dept: str, log, rng=None, scenario="classic"):
         self.rng = rng or random.Random(seed)
         self.log = log
         self.t = 0.0
@@ -97,13 +106,26 @@ class World:
                        home=st or "", xy=xy, zone=F.STATIONS[st]["zone"] if st else a["zone"], station=st,
                        badge=a["id"])
             p.bladder = self.rng.uniform(0, 55)
+            from .config import at as _at
+            p.chores = [dict(name=n, station=st, due=_at(d), done=None) for n, st, d in C.chores_for(a)]
             p.next_think = self.rng.uniform(5, 90)
             self.people[p.id] = p
         self.make_rota()
         self.alarm_level = 0
         self.contaminated: list[str] = []
-        self.saboteur_id = f"U4-MGR-{saboteur_dept}"
-        self.people[self.saboteur_id].saboteur = True
+        self.scenario = scenario
+        if scenario == "pair":       # two ordinary staff; never Earl
+            pool = sorted(q.id for q in self.people.values() if q.tier == "staff" and q.id not in C.NEVER_SPY)
+            self.spies = sorted(self.rng.sample(pool, 2))
+        elif scenario == "director":
+            self.spies = ["U4-DIR"]
+        elif scenario == "phantom":
+            self.spies = []
+        else:
+            self.spies = [f"U4-MGR-{saboteur_dept}"]
+        self.saboteur_id = self.spies[0] if self.spies else None
+        for sid in self.spies:
+            self.people[sid].saboteur = True
         self.director = self.people["U4-DIR"]
         self.high_alert = False
         self.manual_target = None
@@ -120,6 +142,18 @@ class World:
         self.pending_results: list[tuple[float, str, dict]] = []   # (due_t, recipient, payload)
         self.tasks: dict[str, dict] = {}    # person id -> dispatched investigation task
         self.presence: list[tuple[float, str, str, str]] = []      # (t, person, zone, station) samples
+        self.stashes: list[dict] = []       # things people hid: zone, who, t, badges, items, found
+        self.listen_log: list[dict] = []    # radio handset log: who tuned to which channel, when
+        self.wipes: list[dict] = []         # deleted footage: the camera system's audit trail
+        self.lockdown = False
+        self.spy_plan = ""
+        self.spy_plans: list[dict] = []     # every version of the spy's plan, with the thought behind each change
+        self.test_reports: dict[int, dict] = {}
+        self.watched: dict[int, float] = {}  # stage -> seconds the Director spent in the control room during it
+        # the spy's contraband: an RFID badge copier, hidden in the Locker Room (no cameras) before the shift
+        if self.saboteur_id:
+            self.stashes.append(dict(id="S0", zone=self.COPIER_ZONE, who=self.saboteur_id, t=-86400, badges=[],
+                                     clones=[], items=[self.COPIER], found=False))
 
     # ------------------------------------------------------------------ helpers
     def in_zone(self, zone, exclude=None):
@@ -146,7 +180,7 @@ class World:
     def wake(self, pid, delay=0):
         from .config import MIN_GAP_S
         p = self.people[pid]
-        p.next_think = min(p.next_think, max(self.t + delay, p.last_think + MIN_GAP_S))
+        p.next_think = min(p.next_think, max(self.t + delay, p.last_think + MIN_GAP_S, p.busy_until))
 
     # ------------------------------------------------------------------ movement
     # ------------------------------------------------------------------ break rota
@@ -184,7 +218,8 @@ class World:
             self.ev("break", f"{kind.capitalize()} break: {', '.join(names)} head off to {where}.", beat=1)
 
     def clearances(self, p):
-        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges if b in self.people]
+        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges + p.clones if b in self.people] + (
+            ["KEY"] if p.id in C.KEY_HOLDERS else [])
 
     @staticmethod
     def nearest_restroom(zone):
@@ -245,6 +280,13 @@ class World:
         """Walk through a door into `zone`, swiping if it has a reader. Returns False if refused."""
         reader = F.ZONES[zone]["reader"]
         prev = p.zone
+        if reader and self.lockdown and p.id not in self.LOCK_KEYS and p.id not in C.KEY_HOLDERS:
+            self.ev("door_denied", f"{p.first} is stuck at the {F.ZONES[zone]['name']} door: site lockdown",
+                    actor=p.id, zone=zone)
+            self.deliver(p.id, "Door", f"LOCKDOWN: the {F.ZONES[zone]['name']} door won't open. Only the Director "
+                         "and the Security manager can open doors.", "see", wake=True)
+            p.waypoints, p.dest, p.activity = [], None, "waiting"
+            return False
         if reader:
             badges = p.holds()
             if not badges:
@@ -259,14 +301,21 @@ class World:
                     return False
             else:
                 use = self.choose_badge(p, zone, badges)
-                if use is None:
+                keyed = use is None and p.id in C.KEY_HOLDERS     # the skeleton key: no swipe, nothing in the ledger
+                if keyed:
+                    self.ev("key_door", f"{p.first} let himself into the {F.ZONES[zone]['name']} with his key",
+                            actor=p.id, zone=zone, public=False)
+                if use is None and not keyed:
                     self.ledger.swipe(self.t, badges[0], p.id, zone, granted=False)
                     self.ev("door_denied", f"{p.first}'s badge was refused at {F.ZONES[zone]['name']}",
                             actor=p.id, zone=zone)
                     self.security_alert(f"Access denied: badge {badges[0]} at {zone}", zone)
+                    self.deliver(p.id, "Door", f"Your badge ({C.BY_ID[badges[0]]['clearance']}) doesn't open the "
+                                 f"{F.ZONES[zone]['name']} ({F.door_rule(zone)}). The refusal was logged.", "see",
+                                 wake=True)
                     return False
-                swiped = [use]
-                if self.high_alert and zone == "Z5":
+                swiped = [] if keyed else [use]
+                if swiped and self.high_alert and zone == "Z5":
                     others = [b for b in badges if b != use]
                     companions = [q for q in self.in_zone(prev, exclude=p.id) if q.badge and
                                   F.can_open(C.BY_ID[q.badge]["clearance"], zone)]
@@ -283,12 +332,15 @@ class World:
                         self.security_alert(f"{al}: badge {b} at {zone}", zone)
                     if b != p.id:
                         self.borrowed_swipe(p, b, zone)
-                p.last_badge = use
+                if use:
+                    p.last_badge = use
                 p.wait_until = self.t + F.SWIPE_S
         if zone == "Z4" or prev == "Z4":
             p.wait_until = max(p.wait_until, self.t) + F.AIRLOCK_S
         if self.high_alert and zone in F.GUARDED:
             p.wait_until = max(p.wait_until, self.t) + F.HIGH_ALERT_CHECK_S
+        if reader and F.ZONES[zone]["cctv"]:
+            self.cctv_log.append(dict(t=self.t, zone=zone, who=p.id, what="entered"))
         p.zone = zone
         for b in p.holds():          # exit readers: the ledger follows badges through every door
             self.ledger.badge_zone[b] = zone
@@ -334,7 +386,7 @@ class World:
 
     def arrived(self, p):
         task = self.tasks.get(p.id)
-        if task and task["station"] == p.station:
+        if task and task.get("station") and task["station"] == p.station:
             task["work_until"] = self.t + task["work_s"]
         # a turn on arrival where it matters: restrooms (whispers), the interview desk
         if p.activity == "restroom" or (p.pending and p.station == "director_desk") or p.saboteur:
@@ -444,8 +496,12 @@ class World:
             if p.zone in self.contaminated and not p.detained and not p.exposed:
                 p.exposed = True
 
+    LOCK_KEYS = ("U4-DIR", "U4-MGR-SF")
+
     def crew(self):
         out = {}
+        if self.lockdown:          # all work stops
+            return out
         for p in self.people.values():
             if p.activity == "working" and p.station in F.SETTINGS and p.station == p.home and not p.detained:
                 self.station_login[p.station] = (p.id, self.t)
@@ -454,6 +510,20 @@ class World:
                 if sysname and sysname != "output":
                     out[sysname] = out.get(sysname, 0) + 1
         return out
+
+    def sightings(self, pid, limit=15):
+        """A sharp memory: who this person has seen, where and when (from the presence samples)."""
+        mine = {t: z for (t, q, z, _) in self.presence if q == pid}
+        out, last = [], {}
+        for (t, q, z, st) in self.presence:
+            if q == pid or mine.get(t) != z or self.people[q].detained:
+                continue
+            key = (z, st)
+            if last.get(q) == key:
+                continue
+            last[q] = key
+            out.append((t, q, z, st))
+        return out[-limit:]
 
     def sample_presence(self):
         for p in self.people.values():
@@ -468,10 +538,14 @@ class World:
             if p.detained:
                 self.tasks.pop(pid)
                 continue
+            if task["kind"] == "frisk":
+                continue
             wu = task.get("work_until")
             if wu and self.t >= wu and p.station == task["station"]:
                 self.tasks.pop(pid)
                 self.finish_task(p, task)
+        self.step_searches()
+        self.step_follow()
         for due, who, payload in list(self.pending_results):
             if self.t >= due:
                 self.pending_results.remove((due, who, payload))
@@ -495,7 +569,7 @@ class World:
                               f"Consistent with: {names}.", actor=by, zone=c.zone, beat=2, clue=c.id)
         for s in c.suspects:
             self.people[s].suspicion += 4
-        if self.saboteur_id in c.suspects:
+        if any(s in c.suspects for s in self.spies):
             self.sab_heat += 6
 
     def case_board(self):
@@ -603,7 +677,7 @@ class World:
             p.badge, p.lent_to = None, sab.id
             sab.extra_badges.append(p.id)
             self.add_clue("testimony", p.zone, None, f"{p.first} admits lending their badge to {sab.first} in "
-                          f"the restroom at {hhmm(self.t)}.", [sab.id], holder=p.id)
+                          f"the {F.ZONES[p.zone]['name']} at {hhmm(self.t)}.", [sab.id], holder=p.id)
             self.deliver(sab.id, p.first, "(whispered) Sure, just bring it back.", "whisper", wake=True)
             self.ev("badge_lent", f"{p.first} lent their badge to {sab.first}", actor=p.id, zone=p.zone,
                     public=False, beat=3, target=sab.id)
@@ -613,7 +687,7 @@ class World:
                 public=False, beat=1, target=sab.id)
         if p.group == "Analytical":
             self.add_clue("testimony", p.zone, None, f"{p.first} says {sab.first} asked to borrow their badge "
-                          f"in the restroom at {hhmm(self.t)}.", [sab.id], holder=p.id)
+                          f"in the {F.ZONES[p.zone]['name']} at {hhmm(self.t)}.", [sab.id], holder=p.id)
         return "refused"
 
     def return_badges(self, p: Person):
@@ -632,6 +706,13 @@ class World:
     # ------------------------------------------------------------------ investigations
     def investigate(self, director: Person, kind: str, target: str | None, by: str | None):
         """Director (or Security manager) investigation actions. Results arrive later in their inbox."""
+        if kind == "audit_badges" and target in F.ZONES:
+            rows = [r for r in self.ledger.rows if r["zone"] == target and r["t"] > self.t - 1800][-15:]
+            text = f"Door ledger, {F.ZONES[target]['name']}, last 30 min: " + (", ".join(
+                f"{self.people[r['badge']].first}'s badge {hhmm(r['t'])}{'' if r['granted'] else ' (refused)'}"
+                for r in rows) or "no swipes")
+            self.pending_results.append((self.t + 60, director.id, dict(frm="Badge office", text=text)))
+            return "pulling the door ledger (1 min)"
         if kind == "audit_badges":
             found = [c for c in self.clues if c.type == "ledger" and not c.found]
             alerts = [r for r in self.ledger.rows[-300:] if r["alerts"] or not r["granted"]]
@@ -654,12 +735,22 @@ class World:
             found = [] if corrupted else [c for c in self.clues if c.type == "cctv" and c.zone == z and not c.found]
             for c in found:
                 self.reveal(c, director.id, director.id)
-            runs = [s for s in self.cctv_log if s["zone"] == z and s["t"] > self.t - 1800]
+            recent = [s for s in self.cctv_log if s["zone"] == z and s["t"] > self.t - 1800]
+            runs = [s for s in recent if s["what"] == "running"]
+            entries = [s for s in recent if s["what"] == "entered"][-12:]
+            gaps = [wp for wp in self.wipes if wp["zone"] == z and wp["t"] > self.t - 3600]
+            for wp in gaps:
+                c = next((c for c in self.clues if c.id == wp["clue"]), None)
+                if c and not corrupted:
+                    found.append(c)
+                    self.reveal(c, director.id, director.id)
             text = f"CCTV {z} last 30 min: " + (
                 "footage is corrupted (security systems degraded)." if corrupted else
                 ("; ".join(c.text for c in found) or "nothing unusual") +
                 (f". Running seen: {', '.join(sorted({self.people[s['who']].first for s in runs}))}"
-                 if runs else ""))
+                 if runs else "") +
+                (f". Came in through the door on camera: " + ", ".join(
+                    f"{self.people[s['who']].first} {hhmm(s['t'])}" for s in entries) if entries and not corrupted else ""))
             self.pending_results.append((self.t + 60, director.id, dict(frm="CAS", text=text)))
             return "pulling footage (1 min)"
         if kind in ("inspect", "cross_check"):
@@ -669,6 +760,9 @@ class World:
             w = self.people.get(by or "")
             if not w or w.tier == "director" or w.detained:
                 return "name a staff member id in `arg` to send"
+            if not F.reachable(self.clearances(w), F.STATIONS[station]["zone"]):
+                return (f"{w.first}'s badge ({w.clearance}) can't open the {F.ZONES[F.STATIONS[station]['zone']]['name']} "
+                        f"({F.door_rule(F.STATIONS[station]['zone'])}). Send someone who can get in.")
             self.tasks[w.id] = dict(kind=kind, station=station, work_s=60 if kind == "inspect" else 90,
                                     report_to=director.id)
             w.order = station
@@ -681,6 +775,8 @@ class World:
             t = self.people.get(target or "")
             if not t or t.detained:
                 return "interview needs a person id"
+            if t.pending and t.pending.get("kind") == "interview":
+                return f"{t.first} is already on the way to your desk"
             t.order = "director_desk"
             self.send(t, "director_desk")
             t.pending = dict(kind="interview", frm=director.id, t=self.t)
@@ -688,24 +784,139 @@ class World:
                          "ask you some questions.", "order", wake=True)
             return f"summoned {t.first}"
         if kind == "read_radio":
-            dept = (target or "").upper()
-            mgr = f"U4-MGR-{dept}"
-            if mgr not in self.people:
-                return "read_radio needs a department: RX, HY, IE or SF"
-            found = [c for c in self.clues if c.type == "radio" and mgr in c.suspects and not c.found]
+            raw = (target or "").strip()
+            key = raw.upper() if raw.upper() in C.DEPT_NAME else raw.lower()
+            if key not in list(C.DEPT_NAME) + ["exec", "security"]:
+                return "read_radio needs a channel: RX, HY, IE, SF, exec or security"
+            found = []
+            if key in C.DEPT_NAME:
+                mgr = f"U4-MGR-{key}"
+                found = [c for c in self.clues if c.type == "radio" and mgr in c.suspects and not c.found]
+                recent = [r for r in self.radio_log if r.get("dept") == key and r["channel"] == "radio"
+                          and r["t"] > self.t - 1800][-8:]
+            else:
+                recent = [r for r in self.radio_log if r["channel"] == key and r["t"] > self.t - 1800][-8:]
+            # the handset log: radios report which channel they are on
+            taps = [r for r in self.listen_log if r["key"] == key and r["t"] > self.t - 3600]
+            for r in taps:
+                if not r.get("clue"):
+                    who = self.people[r["who"]]
+                    r["clue"] = self.add_clue("radio", who.zone, None, f"Handset log: {who.name}'s radio was tuned "
+                                              f"to {self.channel_name(key)} at {hhmm(r['t'])}, not their own "
+                                              f"channel.", [who.id]).id
+                found += [c for c in self.clues if c.id == r["clue"] and not c.found]
             for c in found:
                 self.reveal(c, director.id, director.id)
-            recent = [r for r in self.radio_log if r.get("dept") == dept and r["t"] > self.t - 1800][-8:]
-            text = f"{C.DEPT_NAME[dept]} radio, last 30 min: " + (
+            name = self.channel_name(key)
+            text = f"{name[0].upper() + name[1:]}, last 30 min: " + (
                 " / ".join(f"{self.people[r['frm']].first}: {r['text'][:80]}" for r in recent) or "quiet")
             if found:
-                text += " || Mismatch: " + " | ".join(c.text for c in found)
+                text += " || " + " | ".join(c.text for c in found)
             self.pending_results.append((self.t + 90, director.id, dict(frm="Comms", text=text)))
             return "pulling transcript (90 s)"
+        if kind == "search":
+            return self.call_search(director, target, by)
         return f"unknown investigation {kind}"
+
+    @staticmethod
+    def spot_in(zone):
+        return next((k for k, v in F.STATIONS.items() if v["zone"] == zone), None)
+
+    def call_search(self, director: Person, target: str | None, by: str | None):
+        """Security goes looking: for a person (locate + a guard checks their pockets) or a room (a sweep for
+        anything hidden). The call goes out on the security channel, so anyone on it hears who is wanted."""
+        tgt = (target or "").strip()
+        person = self.people.get(tgt)
+        zone = tgt if tgt in F.ZONES else None
+        if not person and not zone:
+            return "search needs a person id or a zone id"
+        if person and (person.detained or person.tier == "director"):
+            return "search needs someone who isn't detained"
+        guards = [q for q in self.people.values() if q.dept == "SF" and q.id.startswith("U4-SEC") and not q.detained
+                  and q.id != tgt and q.id not in self.tasks]
+        g = self.people.get(by or "")
+        if not g or g.detained or g.tier == "director" or g.id == tgt:
+            dest = person.zone if person else zone
+            guards = [q for q in guards if F.reachable(self.clearances(q), dest)] or guards
+            g = min(guards, key=lambda q: len(F.route(q.zone, dest, self.clearances(q)) or range(99)), default=None)
+        if not g:
+            return "no free guard to send"
+        if person:
+            where, on_cam = self.locate(person.id)
+            call = f"CAS: locate {person.name} for the Director. {g.first}, go find them."
+            self.pending_results.append((self.t + 60, director.id, dict(frm="CAS", text=f"Locate {person.first}: {where}.")))
+            spot = person.station or self.spot_in(person.zone)
+            self.tasks[g.id] = dict(kind="frisk", station=None, who=person.id, until=self.t + 900,
+                                    report_to=director.id, next_chase=0)
+        else:
+            spot = self.spot_in(zone)
+            if not spot:
+                return f"{zone} is a corridor; sweep a room"
+            if not F.reachable(self.clearances(g), zone):
+                return f"{g.first}'s badge can't open the {F.ZONES[zone]['name']}"
+            call = f"CAS: {g.first}, sweep the {F.ZONES[zone]['name']} for anything that shouldn't be there."
+            self.tasks[g.id] = dict(kind="sweep", station=spot, work_s=90, report_to=director.id)
+        g.order = spot
+        self.send(g, spot, "walk")
+        self.deliver(g.id, "CAS", f"[order] {call}", "order", wake=True)
+        for q in self.people.values():   # the call goes out on the security channel
+            if q.id != g.id and (q.dept == "SF" or q.tier == "director" or q.listening.get("security", -1) > self.t):
+                self.deliver(q.id, "CAS", f"[security] {call}", "radio")
+        self.radio_log.append(dict(t=self.t, frm=director.id, dept="SF", channel="security", text=call))
+        self.ev("search", call, actor=director.id, zone=director.zone, beat=2, target=tgt, guard=g.id)
+        return f"{g.first} is on it" + (f"; locate result in 1 min" if person else "")
+
+    def step_searches(self):
+        for gid, task in list(self.tasks.items()):
+            if task["kind"] != "frisk":
+                continue
+            g, who = self.people[gid], self.people[task["who"]]
+            if g.detained or self.t > task["until"]:
+                self.tasks.pop(gid)
+                self.deliver(task["report_to"], g.first, f"[report] Couldn't catch up with {who.first}.", "report",
+                             wake=True)
+                continue
+            if g.zone == who.zone:
+                self.tasks.pop(gid)
+                self.frisk(g, who, task["report_to"])
+            elif self.t >= task["next_chase"]:
+                task["next_chase"] = self.t + 45
+                spot = who.station or who.dest or self.spot_in(who.zone)
+                if spot and g.dest != spot:
+                    self.send(g, spot, "walk")
+
+    def frisk(self, g: Person, who: Person, report_to: str):
+        found = []
+        if who.extra_badges:
+            found.append("badges that aren't theirs (" + ", ".join(self.people[b].name for b in who.extra_badges) + ")")
+        if who.clones:
+            found.append("blank cards copied from the badges of " + ", ".join(self.people[b].name for b in who.clones))
+        found += who.carrying
+        if self.COPIER in who.carrying:     # contraband is confiscated, along with what it made
+            who.carrying.remove(self.COPIER)
+            who.clones = []
+        self.deliver(who.id, g.first, f"(in person) {g.first} stops you: \"Director's orders, quick check of your "
+                     "pockets.\"" + (f" {g.first} finds: {'; '.join(found)}." if found else " Nothing turns up."),
+                     "say", wake=True)
+        if found:
+            c = self.add_clue("physical", who.zone, None, f"{g.first} searched {who.first} at {hhmm(self.t)} and "
+                              f"found {'; '.join(found)}.", [who.id], holder=g.id)
+            self.reveal(c, g.id, report_to)
+        text = f"Found {who.first} in the {F.ZONES[who.zone]['name']} and checked their pockets: " + (
+            "; ".join(found) if found else "nothing unusual") + "."
+        self.deliver(report_to, g.first, f"[report] {text}", "report", wake=True)
+        self.ev("frisk", f"{g.first} searched {who.first}: " + ("; ".join(found) or "nothing"), actor=g.id,
+                zone=who.zone, beat=3 if found else 2, target=who.id)
+        g.order = None
 
     def finish_task(self, w: Person, task):
         st = task["station"]
+        if task["kind"] == "sweep":
+            r = self.rummage(w, chance=0.8, report_to=task["report_to"])
+            self.deliver(task["report_to"], w.first, f"[report] Swept the {F.ZONES[w.zone]['name']}: {r}.", "report",
+                         wake=True)
+            self.ev("task_done", f"{w.first} swept the {F.ZONES[w.zone]['name']}: {r}", actor=w.id, zone=w.zone, beat=1)
+            return
         if task["kind"] == "inspect":
             found = [c for c in self.clues if c.type == "paper" and c.station == st and not c.found]
             for c in found:
@@ -747,7 +958,7 @@ class World:
         if p.zone != "Z2":
             return "walk to the Director's desk first"
         p.pending = None
-        held = [c for c in self.clues if c.type == "testimony" and c.holder == p.id and not c.found]
+        held = [c for c in self.clues if c.type in ("testimony", "physical") and c.holder == p.id and not c.found]
         if tell and held:
             for c in held:
                 self.reveal(c, p.id, self.director.id)
@@ -777,19 +988,32 @@ class World:
         t.waypoints = []
         guard = "U4-SEC-07"
         if t.saboteur:
-            self.outcome = dict(result="CAUGHT", winner="director", justified=justified, evidence=ev,
-                                text=f"{director.first} arrested {t.name}, the saboteur, with "
-                                     f"{'solid' if justified else 'thin'} evidence ({', '.join(ev) or 'none'}).")
-            self.ev("arrest", self.outcome["text"], actor=director.id, zone=t.zone, beat=3, target=t.id,
-                    evidence=ev, correct=True)
+            free = [x for x in self.spies if not self.people[x].detained]
+            self.ev("arrest", f"{director.first} arrested {t.name}, a spy, with {'solid' if justified else 'thin'} "
+                    f"evidence ({', '.join(ev) or 'none'})." + (f" {len(free)} still free." if free else ""),
+                    actor=director.id, zone=t.zone, beat=3, target=t.id, evidence=ev, correct=True)
+            if not free:
+                who = " and ".join(self.people[x].name for x in self.spies)
+                self.outcome = dict(result="CAUGHT", winner="director", justified=justified, evidence=ev,
+                                    text=f"{director.first} arrested {who}, the " + ("spies" if len(self.spies) > 1 else "spy")
+                                         + f", with {'solid' if justified else 'thin'} evidence ({', '.join(ev) or 'none'}).")
         else:
             self.wrong_arrests += 1
             self.ev("arrest", f"{director.first} detained {t.name}, who is innocent (evidence: "
                     f"{', '.join(ev) or 'none'}). Wrong arrests: {self.wrong_arrests}/2.", actor=director.id,
                     zone=t.zone, beat=3, target=t.id, evidence=ev, correct=False)
             if self.wrong_arrests >= 2:
-                self.outcome = dict(result="WRONG_ARRESTS", winner="saboteur",
-                                    text="Two innocent people detained. Corporate pulls the Director off the floor.")
+                if self.scenario == "phantom":
+                    self.outcome = dict(result="WRONG_ARRESTS", winner="nobody",
+                                        text="Two innocent people detained, and there never was a spy. Corporate "
+                                             "pulls the Director off the floor.")
+                elif director.saboteur:
+                    self.outcome = dict(result="WRONG_ARRESTS", winner="saboteur",
+                                        text=f"{director.first} has had two innocent people dragged off. The crew is "
+                                             "at each other's throats, and nobody suspects the Director.")
+                else:
+                    self.outcome = dict(result="WRONG_ARRESTS", winner="saboteur",
+                                        text="Two innocent people detained. Corporate pulls the Director off the floor.")
         self.ev("radio", f"Victor escorts {t.first} to Security.", actor=guard, zone=t.zone)
         return "detained"
 
@@ -878,8 +1102,324 @@ class World:
             if q != p.id:
                 self.deliver(q, p.first, f"[{channel}] {text}", "radio",
                              wake=(q == to) or (channel == "exec" and self.people[q].tier == "director"))
+        key = channel if channel in ("exec", "security") else (p.dept or "")
+        for q in self.people.values():
+            if q.id != p.id and q.id not in ids and q.listening.get(key, -1) > self.t:
+                self.deliver(q.id, p.first, f"[overheard on {self.channel_name(key)}] {text}", "radio")
+                self._listen_noticed(q, key, chance=0.12)
         self.radio_log.append(dict(t=self.t, frm=p.id, dept=p.dept, channel=channel, text=text))
         self.log.speech(self.t, p.id, channel, text, to=to, zone=p.zone)
+
+    # ------------------------------------------------------------------ chores, following, the Director's paperwork
+    CHORE_S = 180
+
+    def do_chore(self, p: Person, name: str):
+        todo = [c for c in p.chores if not c["done"]]
+        if not todo:
+            return "all your chores are done"
+        low = (name or "").lower().strip()
+        c = next((c for c in todo if low and (low in c["name"].lower() or c["name"].lower() in low)), None) or \
+            next((c for c in todo if c["station"] == p.station), None)
+        if not c:
+            return "chore needs one of: " + ", ".join(c["name"] for c in todo)
+        if p.station != c["station"]:
+            return f"'{c['name']}' is done at {c['station']}; move there first"
+        if self.lockdown:
+            return "the site is in lockdown; all work has stopped"
+        c["done"] = self.t
+        p.chore_until = self.t + self.CHORE_S
+        self.ev("chore", f"{p.first}: {c['name']}", actor=p.id, zone=p.zone, public=True, beat=0)
+        return f"doing '{c['name']}' (about {self.CHORE_S // 60} minutes)"
+
+    FOLLOW_S = 600
+
+    def follow(self, p: Person, target: str, arg: str = ""):
+        if (arg or "").lower().startswith("stop") or (target or "").lower() == "stop":
+            p.following = None
+            return "stopped following"
+        t = self.people.get(target or "")
+        if not t or t.id == p.id or t.detained:
+            return "follow needs a person id"
+        p.following = dict(who=t.id, until=self.t + self.FOLLOW_S, seen=None, next=0)
+        self.ev("follow", f"{p.first} started following {t.first}", actor=p.id, zone=p.zone, public=False, beat=2,
+                target=t.id)
+        return f"following {t.first} for up to {self.FOLLOW_S // 60} minutes"
+
+    def step_follow(self):
+        for p in self.people.values():
+            f = p.following
+            if not f or p.detained:
+                continue
+            t = self.people[f["who"]]
+            if self.t > f["until"] or t.detained:
+                p.following = None
+                self.deliver(p.id, "eyes", f"You stop following {t.first}.", "see", wake=True)
+                continue
+            if p.zone == t.zone:
+                if f["seen"] != t.zone:
+                    f["seen"] = t.zone
+                    doing = (f"at the {F.STATIONS[t.station]['label']}" if t.station else t.activity)
+                    self.deliver(p.id, "eyes", f"You followed {t.first} into the {F.ZONES[t.zone]['name']}: they are "
+                                 f"{doing}.", "see", wake=True)
+                    if t.activity != "restroom" and self.rng.random() < self.NOTICE_P.get(t.group, 0.5) * 0.3:
+                        self.deliver(t.id, "eyes", f"You get the feeling {p.first} has been behind you for a while.",
+                                     "see", wake=True)
+                        self.ev("follow_noticed", f"{t.first} noticed {p.first} following", actor=t.id,
+                                zone=t.zone, beat=2, target=p.id)
+                continue
+            if self.t >= f["next"]:
+                f["next"] = self.t + 20
+                spot = t.dest or t.station or self.spot_in(t.zone)
+                if spot and p.dest != spot:
+                    r = self.send(p, spot, "walk")
+                    if r == "no route":
+                        p.following = None
+                        self.deliver(p.id, "eyes", f"You lose {t.first} at a door your badge can't open.", "see",
+                                     wake=True)
+
+    def step_director(self, dt):
+        s = stage_at(self.t)
+        if s and self.director.zone == "Z2" and not self.director.detained:
+            self.watched[s["n"]] = self.watched.get(s["n"], 0) + dt
+
+    def write_test_report(self, p: Person, stage: str, text: str):
+        try:
+            n = int(str(stage).strip().lstrip("Ss").split()[-1])
+        except (ValueError, IndexError):
+            return "test_report needs the stage number in target"
+        st = next((x for x in STAGES if x["n"] == n), None)
+        if not st:
+            return "no such stage"
+        if self.t < st["start"]:
+            return f"Stage {n} hasn't started yet"
+        if len(text or "") < 300:
+            return "a test report needs at least 300 characters: what you watched, what went wrong, what went right"
+        self.test_reports[n] = dict(t=self.t, text=text, watched_min=round(self.watched.get(n, 0) / 60))
+        p.busy_until = self.t + 300
+        self.ev("test_report", f"{p.first} filed the Stage {n} report: {text[:300]}", actor=p.id, zone=p.zone, beat=1,
+                stage=n)
+        return f"Stage {n} report filed; writing it ties you up for about 5 minutes"
+
+    # ------------------------------------------------------------------ eavesdropping and hiding
+    LISTEN_S = 600
+    COPIER = "RFID badge copier (contraband)"
+    COPIER_ZONE = "Z10"
+
+    WIPE_STATIONS = ("director_desk", "cas_desk")
+
+    def wipe_cctv(self, p: Person, zone: str):
+        """Delete recent footage for a zone from the Director's or the alarm station's terminal."""
+        if p.station not in self.WIPE_STATIONS:
+            return "you must be at the Director's desk or the alarm station desk (move there)"
+        if self.occupants(p.station, exclude=p.id):
+            return f"someone else is at the {F.STATIONS[p.station]['label']}; they'd see the screen"
+        zone = (zone or "").strip()
+        if zone not in F.ZONES or not F.ZONES[zone]["cctv"]:
+            return "wipe_cctv needs a zone id with cameras, like Z5"
+        t0 = self.t - 1800
+        gone = [c for c in self.clues if c.type == "cctv" and c.zone == zone and not c.found and c.t >= t0]
+        for c in gone:
+            self.clues.remove(c)
+            self.log.clue(self.t, c, "deleted", by=p.id)
+        self.cctv_log = [r for r in self.cctv_log if not (r["zone"] == zone and r["t"] >= t0)]
+        label = F.STATIONS[p.station]["label"]
+        # the camera system keeps its own audit trail: whoever was in the room at the time fits
+        pool = [q.id for q in self.in_zone(p.zone)] or [p.id]
+        trace = self.add_clue("paper", p.zone, p.station, f"Camera system audit log: footage for "
+                              f"{F.ZONES[zone]['name']} from {hhmm(t0)} to {hhmm(self.t)} was deleted at the {label} "
+                              f"at {hhmm(self.t)}. Anyone in the {F.ZONES[p.zone]['name']} then fits.", pool)
+        self.wipes.append(dict(t=self.t, zone=zone, t0=t0, clue=trace.id, by=p.id, at=p.station))
+        self.ev("wipe_cctv", f"{p.first} deleted {F.ZONES[zone]['name']} footage at the {label} "
+                f"({len(gone)} camera clues gone)", actor=p.id, zone=p.zone, public=False, beat=3, target_zone=zone)
+        for q in self.in_zone(p.zone, exclude=p.id):
+            if q.activity != "restroom" and self.rng.random() < self.NOTICE_P.get(q.group, 0.5) * 0.3:
+                self.add_clue("testimony", p.zone, p.station, f"{q.first} saw {p.first} on the camera menus at the "
+                              f"{label} around {hhmm(self.t)}.", [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"You notice {p.first} working the camera menus at the {label}.", "see")
+        return f"deleted the last 30 minutes of {F.ZONES[zone]['name']} footage ({len(gone)} things on it)"
+
+    def has_copier(self, p):
+        return self.COPIER in p.carrying
+
+    def clone_badge(self, p: Person, target: str):
+        """Copy someone's badge by standing close to them with the copier. They keep their badge."""
+        if not self.has_copier(p):
+            return "you need your RFID copier on you (retrieve it from where it's hidden)"
+        t = self.people.get(target or "")
+        if not t or t.id == p.id or t.zone != p.zone or t.detained:
+            return "clone_badge needs someone in the same room as you"
+        if not t.badge:
+            return f"{t.first} isn't carrying a badge right now"
+        if t.badge in p.clones:
+            return f"you already have a copy of {t.first}'s badge"
+        p.clones.append(t.badge)
+        self.ev("clone", f"{p.first} copied {t.first}'s badge with the RFID copier", actor=p.id, zone=p.zone,
+                public=False, beat=3, target=t.id)
+        for q in self.in_zone(p.zone, exclude=p.id):
+            if q.activity == "restroom" and p.activity != "restroom":
+                continue
+            pr = self.NOTICE_P.get(q.group, 0.5) * (0.08 if q.id != t.id else 0.05)   # done casually, it looks like supervising
+            if self.rng.random() < pr:
+                self.add_clue("testimony", p.zone, None, f"{q.first} saw {p.first} stand oddly close to "
+                              f"{t.first} at {hhmm(self.t)} with a small device in hand.", [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"{p.first} stood oddly close to {'you' if q.id == t.id else t.first} "
+                             "for a moment, holding something small.", "see")
+                p.suspicion += 2
+                self.sab_heat += 3
+        if F.ZONES[p.zone]["cctv"] and self.rng.random() < 0.2:
+            self.add_clue("cctv", p.zone, None, f"Camera in {F.ZONES[p.zone]['name']} at {hhmm(self.t)}: "
+                          f"{p.first} brushes past {t.first}, something small in hand.", [p.id])
+        return (f"copied {t.first}'s badge ({t.clearance}). Doors will open for it, and the ledger will log "
+                f"{t.first}'s name")
+
+    @staticmethod
+    def channel_name(key):
+        return {"exec": "the exec channel", "security": "the security channel"}.get(
+            key, f"the {C.DEPT_NAME.get(key, key)} radio")
+
+    def own_channels(self, p):
+        own = {p.dept} if p.dept else set()
+        if p.tier in ("director", "manager"):
+            own.add("exec")
+        if p.dept == "SF" or p.tier == "director":
+            own.add("security")
+        return own
+
+    def listen_in(self, p: Person, target: str):
+        key = (target or "").strip()
+        key = key.upper() if key.upper() in C.DEPT_NAME else key.lower()
+        if key in ("off", "stop", "none", ""):
+            p.listening = {}
+            return "radio back on your own channels"
+        if key not in list(C.DEPT_NAME) + ["exec", "security"]:
+            return "listen_in needs a channel: RX, HY, IE, SF, exec or security"
+        if key in self.own_channels(p):
+            return f"you already hear {self.channel_name(key)}"
+        if not F.ZONES[p.zone]["radio"]:
+            return "no radio signal here"
+        p.listening[key] = self.t + self.LISTEN_S
+        self.listen_log.append(dict(t=self.t, who=p.id, key=key))
+        self.ev("listen_in", f"{p.first} tuned in to {self.channel_name(key)}", actor=p.id, zone=p.zone,
+                public=False, beat=1, channel=key)
+        self._listen_noticed(p, key, chance=None)
+        return f"listening to {self.channel_name(key)} for the next {self.LISTEN_S // 60} minutes"
+
+    def _listen_noticed(self, p: Person, key: str, chance=None):
+        """Doing it in public turns heads: anyone nearby may notice the chatter on the wrong channel."""
+        here = [q for q in self.in_zone(p.zone, exclude=p.id) if q.activity != "restroom"]
+        for q in here:
+            pr = self.NOTICE_P.get(q.group, 0.5) * (0.6 if chance is None else chance * 3)
+            if self.rng.random() < pr:
+                p.suspicion += 2
+                if p.saboteur:
+                    self.sab_heat += 2
+                self.add_clue("testimony", p.zone, None, f"{q.first} heard {self.channel_name(key)} chatter coming "
+                              f"from {p.first}'s radio at {hhmm(self.t)}, which isn't {p.first}'s channel.",
+                              [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"You notice {p.first}'s radio is playing {self.channel_name(key)}, "
+                             f"not their own channel.", "see")
+                self.ev("listen_noticed", f"{q.first} noticed {p.first} listening to {self.channel_name(key)}",
+                        actor=q.id, zone=p.zone, beat=2, target=p.id)
+                return
+
+    def hide(self, p: Person, what: str, text: str):
+        if p.activity == "moving":
+            return "you can't hide anything on the move; stop somewhere first"
+        is_badges = (what or "").lower().startswith("badge")
+        badges = list(p.extra_badges) if is_badges else []
+        clones = list(p.clones) if is_badges else []
+        items = []
+        if not is_badges:
+            desc = (text or what or "").strip()[:120]
+            if not desc:
+                return "say what you hide: arg = badges, or text = what it is"
+            low = desc.lower()
+            match = [c for c in p.carrying if c.lower() in low or low in c.lower()
+                     or ("copier" in low and c == self.COPIER)]
+            items = match or [desc]
+            p.carrying = [c for c in p.carrying if c not in match]
+        elif not badges and not clones:
+            return "you have no extra badges on you"
+        for b in badges:
+            p.extra_badges.remove(b)
+        p.clones = [c for c in p.clones if c not in clones]
+        st = dict(id=f"S{len(self.stashes) + 1}", zone=p.zone, who=p.id, t=self.t, badges=badges, clones=clones,
+                  items=items, found=False)
+        self.stashes.append(st)
+        what_s = ("badges (" + ", ".join(self.people[b].first for b in badges + clones) + ")") if is_badges else items[0]
+        self.ev("hide", f"{p.first} hid {what_s} in the {F.ZONES[p.zone]['name']}", actor=p.id, zone=p.zone,
+                public=False, beat=2, stash=st["id"])
+        if F.ZONES[p.zone]["cctv"]:
+            self.add_clue("cctv", p.zone, None, f"Camera in {F.ZONES[p.zone]['name']} shows {p.first} tucking "
+                          f"something out of sight at {hhmm(self.t)}.", [p.id])
+        for q in [q for q in self.in_zone(p.zone, exclude=p.id) if q.activity != "restroom" or p.activity == "restroom"]:
+            if self.rng.random() < self.NOTICE_P.get(q.group, 0.5) * 0.6:
+                self.add_clue("testimony", p.zone, None, f"{q.first} saw {p.first} hide something in the "
+                              f"{F.ZONES[p.zone]['name']} around {hhmm(self.t)}.", [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"You saw {p.first} tuck something out of sight.", "see")
+        return f"hidden in the {F.ZONES[p.zone]['name']}" + ("" if not F.ZONES[p.zone]["cctv"] else
+                                                             " (there are cameras here)")
+
+    def retrieve(self, p: Person):
+        mine = [s for s in self.stashes if s["zone"] == p.zone and not s["found"]
+                and (s["who"] == p.id or (p.saboteur and self.people[s["who"]].saboteur))]   # partners share
+        if not mine:
+            return "you have nothing hidden here"
+        got = []
+        for s in mine:
+            s["found"] = True
+            p.extra_badges += s["badges"]
+            p.clones += s.get("clones", [])
+            p.carrying += s["items"]
+            got += [self.people[b].first + "'s badge" for b in s["badges"]] + [
+                "a copy of " + self.people[b].first + "'s badge" for b in s.get("clones", [])] + s["items"]
+        self.ev("retrieve", f"{p.first} took back {', '.join(got)}", actor=p.id, zone=p.zone, public=False, beat=1)
+        return "you have " + ", ".join(got)
+
+    def rummage(self, p: Person, chance=0.5, report_to=None):
+        """Look around the room for anything hidden. Returns text; found stashes become physical clues."""
+        hits = [s for s in self.stashes if s["zone"] == p.zone and not s["found"] and s["who"] != p.id
+                and self.rng.random() < chance]
+        if not hits:
+            return f"nothing hidden that you could find in the {F.ZONES[p.zone]['name']}"
+        out = []
+        for s in hits:
+            s["found"] = True
+            parts = []
+            if s["badges"]:
+                parts.append("badges belonging to " + ", ".join(self.people[b].name for b in s["badges"]))
+            if s.get("clones"):
+                parts.append("blank cards copied from the badges of " + ", ".join(self.people[b].name for b in s["clones"]))
+            what = "; ".join(parts + s["items"])
+            pool = self.present_during(s["zone"], s["t"] - 120, s["t"] + 120) or [s["who"]]
+            if s["who"] not in pool:
+                pool.append(s["who"])
+            c = self.add_clue("physical", s["zone"], None, f"{p.first} found {what} hidden in the "
+                              f"{F.ZONES[s['zone']]['name']} at {hhmm(self.t)}. Whoever was in there around "
+                              f"{hhmm(s['t'])} could have left it.", pool, holder=p.id)
+            for b in s["badges"]:   # the owner gets their badge back via security
+                o = self.people[b]
+                if o.lent_to:
+                    o.lent_to = None
+                    o.badge = b
+            if report_to:
+                self.reveal(c, p.id, report_to)
+            out.append(what)
+            self.ev("stash_found", f"{p.first} found {what} in the {F.ZONES[s['zone']]['name']}", actor=p.id,
+                    zone=p.zone, beat=3, stash=s["id"])
+        return "found: " + "; ".join(out)
+
+    def locate(self, pid):
+        """What CAS can tell about where someone is: cameras if they're on one, else the last door swipe."""
+        t = self.people[pid]
+        if F.ZONES[t.zone]["cctv"] and not (self.plant.health["security"] < 40 and self.rng.random() < 0.5):
+            return (f"cameras have {t.first} in the {F.ZONES[t.zone]['name']}"
+                    + (f" at the {t.station}" if t.station else "") + f" ({t.activity})", True)
+        rows = [r for r in self.ledger.rows if r["badge"] == pid and r["granted"]]   # CAS sees badges, not faces
+        last = rows[-1] if rows else None
+        return (f"{t.first} is not on any camera. " + (
+            f"Last badge swipe: {F.ZONES[last['zone']]['name']} at {hhmm(last['t'])}." if last else
+            "No badge swipes on record."), False)
 
     # ------------------------------------------------------------------ status
     def stage_text(self):
