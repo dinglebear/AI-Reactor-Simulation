@@ -49,6 +49,18 @@ The viewer has:
 - the cast sorted by department color, name or room, the console meters with the truth as a red tick, a timeline
   with the meltdown curve, and Story / Minds / Log feeds
 
+## Run an experiment
+
+```bash
+python -m meltdown.experiment --mock --games 10              # free dry run of the whole pipeline
+python -m meltdown.experiment --live --games 5 --name pilot  # real models, asks before spending credit
+```
+
+Each batch goes to `experiments/<name>/`: `summary.md` (outcomes, teamwork averages and a timestamped highlight
+reel for every game), `metrics.csv` (one row per game), `replays.html` (every game in one viewer with a run
+picker) and `runs/` with the raw replays. Batch runs never pause for you. Measure definitions and a methods draft
+are in [docs/METHODS.md](docs/METHODS.md). Mock numbers only test the pipeline; use `--live` for results.
+
 ## Cost of a live run
 
 A full four-hour shift is roughly 2,000 Haiku turns, 240 Sonnet turns and 50 Opus turns. The run prints token
