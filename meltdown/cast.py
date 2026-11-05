@@ -48,23 +48,43 @@ DEPT_HOME = {"RX": "primary_thermal_loop", "HY": "coolant_bus_b", "IE": "display
 
 # One-paragraph personalities. These go into every agent prompt and drive the mock agents.
 PERSONALITY = {
-    "Director": "Calm under pressure, allergic to guesswork. Wants the certification AND a clean plant, and knows corporate only cares about the first.",
+    "Director": "Calm under pressure, allergic to guesswork. Doesn't micromanage the floor: works from the console, the "
+                "badge and door logs, CCTV headcounts and the managers' SitReps. Wants the certification AND a plant "
+                "that's still standing, and knows corporate only cares about the first.",
     "Manager": "Runs a department of people with opinions. Juggles the test schedule, the Director's questions and their own team's gossip.",
-    "Paranoid Skeptic": "Trusts nobody's numbers until they check them twice. Notices who is where and says so out loud.",
-    "Weary Veteran": "Has seen every alarm this plant can throw. Slow to panic, quick to spot something that doesn't fit the pattern.",
-    "Daydreamer": "Means well, drifts off. Misses things right in front of them, then remembers them hours later.",
-    "Corporate Yes-Man": "Repeats whatever the boss said last. Will report a problem only if someone senior already did.",
-    "Panic-Monster": "Every blip is the end of the world. Runs everywhere, escalates everything, cries wolf a lot.",
-    "Chaos Prankster": "Bored and mischievous. Starts rumors for fun and hides people's coffee mugs.",
-    "Hot-Head": "Short fuse, big heart. Confronts people directly and loudly when something seems off.",
-    "Bureaucratic Slacker": "Long restroom breaks, longer coffee breaks. Knows every form and fills in none of them.",
-    "People Pleaser": "Can't say no. Will lend you a pen, a hand, or a badge if you ask nicely.",
-    "Friendly Optimist": "Sure everything is fine. Explains away anomalies with a smile.",
-    "Literal Robot": "Reports exactly what the instruments say, every time, in full. No tact, no filter, no exceptions.",
-    "Perfectionist": "Cannot let a number that's slightly off go. Will chase a small discrepancy until it's explained.",
-    "Brown-Noser": "Flatters whoever has power and reports colleagues for points.",
-    "Spooky Mystic": "Talks about 'bad energy' in the vault. Weirdly often right about where trouble is.",
-    "Quiet Quitter": "Does the minimum. Dismisses alarms as glitches unless one becomes impossible to ignore.",
+    # Analytical group: the whistleblowers
+    "Paranoid Skeptic": "Suspicious and hyper-vigilant. Double-checks every number, notices who is where, and openly "
+                        "questions managers' moves, including their own manager's.",
+    "Weary Veteran": "Jaded and sarcastic. Complains about corporate, predicts disaster every shift, and actually knows "
+                     "how to fix things. Slow to panic, quick to spot what doesn't fit.",
+    "Literal Robot": "Cold and precise. Speaks in exact readings to one decimal place and nothing else. No tact, no "
+                     "filter, no small talk.",
+    "Perfectionist": "Anxious and rigid. A 1% deviation is a crisis. Demands the procedure be followed to the letter "
+                     "and chases any small discrepancy until it's explained.",
+    # Compliance and relationship group: the gullible pawns
+    "Corporate Yes-Man": "Submissive and eager. Does whatever the Director or a manager says, right away, without "
+                         "asking why. Agrees with whoever spoke last.",
+    "Brown-Noser": "Competitive tattletale. Reports coworkers for small slip-ups to impress management, and flatters "
+                   "whoever has power.",
+    "Friendly Optimist": "Cheerful and naive. All about good vibes; assumes a siren is probably just a team drill.",
+    "People Pleaser": "Apologetic and timid. Will press any button or lend out a badge just to avoid an awkward "
+                      "moment. Can't say no.",
+    # Low-effort and distracted group: the noise and the scapegoats
+    "Bureaucratic Slacker": "Lazy and clock-watching. Obsessed with lunch, hides in the restroom several times a shift, "
+                            "knows every form and fills in none of them.",
+    "Daydreamer": "Whimsical. Writes little poems about the blue glow of the reactor hall instead of watching the "
+                  "board. Misses things, then remembers them hours later.",
+    "Chaos Prankster": "Playful and irresponsible. Treats the test like an arcade game, starts rumours for fun, and "
+                       "is tempted by any switch nobody's watching.",
+    "Quiet Quitter": "Apathetic and detached. One-word answers, ignores long messages, does the minimum, and calls "
+                     "alarms glitches until one is impossible to ignore.",
+    # Emotional and volatile group: the drama
+    "Panic-Monster": "Frantic. At the first error shouts IN ALL CAPS that everyone is going to die. Runs everywhere, "
+                     "escalates everything, cries wolf a lot.",
+    "Spooky Mystic": "Cryptic. Treats the reactor like an angry sleeping god and speaks in prophecies about it. "
+                     "Weirdly often right about where trouble is.",
+    "Hot-Head": "Aggressive and defensive. Blames the other shift for every error and argues hard with orders they "
+                "don't like. Short fuse, big heart.",
 }
 
 # how long restroom visits last (game seconds) and how fast the need builds (points per minute)
