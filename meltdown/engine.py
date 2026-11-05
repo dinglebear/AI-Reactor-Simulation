@@ -53,6 +53,9 @@ class Engine:
         self.wall_start = time.time()
 
     def _live(self, concurrency):
+        if self.mode == "claude-code":
+            from .agents.claude_code import ClaudeCodeBrain
+            return ClaudeCodeBrain(self.world, concurrency=min(concurrency, 4), say=print)
         from .agents.llm import LLMBrain
         return LLMBrain(self.world, concurrency=concurrency)
 

@@ -3,6 +3,7 @@
   python -m meltdown.experiment --mock --games 10                 # free dry run of the whole pipeline
   python -m meltdown.experiment --live --games 5 --name pilot     # real models (costs API credit)
   python -m meltdown.experiment --live --seeds 1-3 --minutes 90   # shorter shifts, chosen seeds
+  python -m meltdown.experiment --claude-code --games 2           # on your Pro/Max plan; waits out usage limits
 
 Everything lands in experiments/<name>/:
   runs/<seed>/replay.json   one folder per game
@@ -172,6 +173,7 @@ def main(argv=None):
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--mock", action="store_true", help="scripted stand-in agents, free (default)")
     g.add_argument("--live", action="store_true", help="Claude agents (needs ANTHROPIC_API_KEY)")
+    g.add_argument("--claude-code", action="store_true", help="Claude agents via Claude Code on your Pro/Max plan")
     ap.add_argument("--games", type=int, default=5)
     ap.add_argument("--first-seed", type=int, default=1)
     ap.add_argument("--seeds", default=None, help="e.g. 1-5 or 3,7,12 (overrides --games)")
@@ -183,11 +185,11 @@ def main(argv=None):
     ap.add_argument("--log-prompts", action="store_true")
     ap.add_argument("--yes", action="store_true", help="skip the cost check for live runs")
     a = ap.parse_args(argv)
-    mode = "live" if a.live else "mock"
+    mode = "live" if a.live else "claude-code" if a.claude_code else "mock"
     seeds = parse_seeds(a)
-    if mode == "live" and not a.yes:
+    if mode != "mock" and not a.yes:
         ans = input(f"About to run {len(seeds)} live game(s) of {a.minutes} min with 30 Claude agents each. "
-                    "This uses API credit. Go? [y/N] ").strip().lower()
+                    "" + ("This uses API credit." if mode == "live" else "This uses your Claude plan's usage.") + " Go? [y/N] ").strip().lower()
         if ans not in ("y", "yes"):
             sys.exit("Cancelled.")
     root, rows = run_batch(seeds, mode, a.name, a.out, a.minutes, a.saboteur, a.concurrency, a.log_prompts)

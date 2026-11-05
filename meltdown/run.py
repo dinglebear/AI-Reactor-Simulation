@@ -3,6 +3,7 @@
   python -m meltdown.run --mock                       # free, deterministic, auto-runs to the end
   python -m meltdown.run --mock --speed 120 --spoilers  # watch it unfold, saboteur moves visible
   python -m meltdown.run --live --human ask           # real models; you play handler + CEO when it pauses
+  python -m meltdown.run --claude-code --minutes 10   # real models on your Pro/Max plan via Claude Code
 """
 from __future__ import annotations
 import argparse
@@ -18,6 +19,8 @@ def main(argv=None):
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--mock", action="store_true", help="rule-based agents, no API calls (default)")
     g.add_argument("--live", action="store_true", help="Claude agents (needs ANTHROPIC_API_KEY or `ant auth login`)")
+    g.add_argument("--claude-code", action="store_true",
+                   help="Claude agents through the Claude Code CLI, on your Pro/Max subscription; waits out usage limits")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--saboteur", default="random", choices=["random", "RX", "HY", "IE", "SF"])
     ap.add_argument("--human", default=None, choices=["ask", "auto"],
@@ -32,9 +35,9 @@ def main(argv=None):
     ap.add_argument("--concurrency", type=int, default=8, help="parallel API calls in live mode")
     ap.add_argument("--out", default="runs", help="parent folder for run directories")
     a = ap.parse_args(argv)
-    mode = "live" if a.live else "mock"
-    human = a.human or ("ask" if mode == "live" else "auto")
-    speed = a.speed if a.speed is not None else (30.0 if mode == "live" else 0.0)
+    mode = "live" if a.live else "claude-code" if a.claude_code else "mock"
+    human = a.human or ("auto" if mode == "mock" else "ask")
+    speed = a.speed if a.speed is not None else (0.0 if mode == "mock" else 30.0)
     run_id = time.strftime("%Y%m%d-%H%M%S") + f"-{mode}-s{a.seed}"
     run_dir = os.path.join(a.out, run_id)
     eng = Engine(seed=a.seed, saboteur=a.saboteur, mode=mode, run_dir=run_dir, human=human, speed=speed,

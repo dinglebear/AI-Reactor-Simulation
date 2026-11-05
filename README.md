@@ -27,6 +27,21 @@ python -m meltdown.run --live --minutes 30 --human auto
 Useful flags: `--saboteur RX|HY|IE|SF` picks the saboteur's seat, `--speed N` sets game seconds per real
 second (0 = flat out), `--log-prompts` stores every agent's full observation, `--concurrency N` caps parallel API calls.
 
+## Run it on your Claude Pro or Max plan (no API key)
+
+```bash
+claude                                                  # once: install Claude Code and log in with your plan
+python -m meltdown.run --claude-code --minutes 10 --human auto
+python -m meltdown.experiment --claude-code --games 2    # batches work too
+```
+
+Each agent turn goes through `claude -p` with only the game prompt (Claude Code's own prompt and tools are
+switched off), so it counts against your plan's usage instead of API credit. When you hit the plan's usage
+limit the game pauses, with the game clock frozen, and carries on by itself when the limit resets, so a full
+game can run overnight. Up to 4 turns run at once. The run prints its usage at the end, including what the same
+game would have cost on the API. If `ANTHROPIC_API_KEY` is set in your shell it is ignored in this mode.
+Reasoning summaries aren't available this way, so the replay's Minds feed shows each agent's own `thought` only.
+
 ## Watch the replay
 
 ```bash
