@@ -88,6 +88,7 @@ class World:
         self.plant = Plant()
         self.ledger = F.BadgeLedger()
         self.people: dict[str, Person] = {}
+        self.opinions = C.opinions(seed)
         for a in C.ALL:
             st = a["station"] or None
             xy = F.jitter(F.STATIONS[st]["xy"], a["id"]) if st else F.jitter(F.center(a["zone"]), a["id"], 40)

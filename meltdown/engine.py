@@ -414,7 +414,10 @@ class Engine:
             cast.append(dict(id=a["id"], name=a["name"], first=C.first(a["name"]), role=a["role"], tier=a["tier"],
                              dept=a["dept"], archetype=a["archetype"], group=a.get("group", "Leadership"),
                              clearance=a["clearance"], color=C.DEPT_COLOR[a["dept"]], home=a["station"],
-                             model=MODELS[a["tier"]], personality=C.PERSONALITY[a["archetype"]],
+                             model=MODELS[a["tier"]], personality=C.PERSONA.get(a["id"]) or C.PERSONALITY[a["archetype"]],
+                             motive=C.motive(a["id"])[0], motive_text=C.motive(a["id"])[1],
+                             reputation=C.reputation(a["id"]),
+                             opinions={k: dict(feel=f, text=x) for k, (f, x) in w.opinions[a["id"]].items()},
                              saboteur=a["id"] == w.saboteur_id))
         replay = dict(
             meta=dict(game="MELTDOWN", version=1, seed=self.seed, mode=self.mode, saboteur=w.saboteur_id,
