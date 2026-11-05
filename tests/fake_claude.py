@@ -19,6 +19,13 @@ if lim and not os.path.exists(lim):
     sys.exit(1)
 sys.stdin.read()
 schema = json.loads(args[args.index("--json-schema") + 1])
+if "scenes" in schema["properties"]:       # the movie writer
+    d = {"title": "Fake film", "logline": "A test.", "scenes": [
+        {"t": 60, "zone": "Z2", "title": "Opening", "lines": [
+            {"who": "narrator", "kind": "narration", "text": "It begins.", "pause": 1},
+            {"who": "U4-DIR", "kind": "say", "text": "A line nobody ever said.", "pause": 0}]}]}
+    print(json.dumps({"type": "result", "is_error": False, "result": "", "structured_output": d}))
+    sys.exit(0)
 acts = schema["properties"]["actions"]["items"]["properties"]["type"]["enum"]
 typ = "work" if "work" in acts else "wait"
 d = dict(thought="Fake thought.", speech="", channel="none", to="", pace="walk", scratchpad="note",

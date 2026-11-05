@@ -76,6 +76,22 @@ reel for every game), `metrics.csv` (one row per game), `replays.html` (every ga
 picker) and `runs/` with the raw replays. Batch runs never pause for you. Measure definitions and a methods draft
 are in [docs/METHODS.md](docs/METHODS.md). Mock numbers only test the pipeline; use `--live` for results.
 
+## The movie
+
+After a game, Claude can read the whole log (every event, line and private thought) and write a narrated
+movie: 12 to 20 scenes with suspense, the spy's private thoughts heard in a disguised voice until the reveal.
+
+```bash
+python -m meltdown.movie runs/latest                # uses the game's mode: --claude-code, --live, or --mock
+python -m meltdown.run --claude-code --movie        # or write it straight after the game
+```
+
+Then open the replay and press **Play the movie**: the camera flies to each scene and your browser's
+text-to-speech reads it with a different voice for every person and a narrator voice (Voices on/off; Next scene
+skips ahead; screen-record it for the video). The writer may only quote what people actually said or thought;
+any line it couldn't match word for word in the log is marked "paraphrased by the narrator". Writing a script
+takes a minute or two and one Opus call.
+
 ## Cost of a live run
 
 A full four-hour shift is roughly 2,000 Haiku turns, 240 Sonnet turns and 50 Opus turns. The run prints token

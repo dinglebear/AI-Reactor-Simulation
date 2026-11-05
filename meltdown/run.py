@@ -34,6 +34,8 @@ def main(argv=None):
     ap.add_argument("--log-prompts", action="store_true", help="store each agent's full observation in thoughts.jsonl")
     ap.add_argument("--concurrency", type=int, default=8, help="parallel API calls in live mode")
     ap.add_argument("--out", default="runs", help="parent folder for run directories")
+    ap.add_argument("--movie", action="store_true",
+                    help="after the game, have Claude write the narrated movie (same mode as the game)")
     a = ap.parse_args(argv)
     mode = "live" if a.live else "claude-code" if a.claude_code else "mock"
     human = a.human or ("auto" if mode == "mock" else "ask")
@@ -44,6 +46,14 @@ def main(argv=None):
                  spoilers=a.spoilers, minutes=a.minutes, quiet=a.quiet, log_prompts=a.log_prompts,
                  concurrency=a.concurrency)
     eng.run()
+    if a.movie:
+        from .movie import make_movie
+        print("Writing the movie script ...", flush=True)
+        try:
+            movie, page = make_movie(run_dir)
+            print(f"Movie '{movie['title']}' ready: open {page} and press 'Play the movie'.")
+        except Exception as e:   # the game is saved either way
+            print(f"Couldn't write the movie ({e}). Try again with: python -m meltdown.movie {run_dir}")
     latest = os.path.join(a.out, "latest")
     try:
         if os.path.islink(latest) or os.path.exists(latest):
