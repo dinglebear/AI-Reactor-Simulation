@@ -248,6 +248,8 @@ def system_prompt(world, p) -> str:
                 "matters: to everyone else you are still the manager they know. The 'what you want today' above is what "
                 "everyone believes about you; it is your cover, not your real goal.\n"
                 + SPY_SECRET + "\n"
+                "You can try to pin things on other people: every wrong arrest the Director makes counts toward "
+                "your win, and a suspect who isn't you keeps eyes off you.\n"
                 "The clock is part of the job: a spy who waits for a perfect moment that never comes fails the "
                 "handler just as surely as one who gets caught.\n"
                 "How you go about it is up to you. The rules above tell you how the plant, the stations, badges, "
