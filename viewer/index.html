@@ -182,7 +182,7 @@ const first = (n) => n.replace("Dr. ", "").split(" ")[0];
 const initials = (n) => { const p = n.replace("Dr. ", "").split(" "); return (p[0][0] + (p[1] ? p[1][0] : "")).toUpperCase(); };
 const KIND_COLOR = { interact: "#ff5f56", lure: "#ff9f43", blocked: "#f2b544", badge_ask: "#ff9f43", note: "#8fb8ff", badge_lent: "#ff5f56", clue_found: "#f2b544", arrest: "#ffffff",
   stage: "#59c98a", pause: "#8fb8ff", corporate: "#8fb8ff", high_alert: "#f2b544", scram: "#ff5f56", end: "#ffffff", spy: "#ff5f56", plant_alarm: "#ff5f56", contamination: "#d4e02a", test_warning: "#f2b544", break: "#59c98a" };
-const SPY_KINDS = new Set(["spy", "interact", "lure", "blocked", "badge_ask", "badge_lent", "handler_msg", "hide", "listen_in", "retrieve"]);
+const SPY_KINDS = new Set(["spy", "interact", "lure", "blocked", "badge_ask", "badge_lent", "handler_msg", "hide", "listen_in", "retrieve", "spy_plan", "clone", "wipe_cctv"]);
 const TITLE_KINDS = new Set(["start", "stage", "end"]);
 const DEPT_ORDER = { null: 0, RX: 1, HY: 2, IE: 3, SF: 4 };
 const PACE = { s: "stroll", w: "walk", r: "run" };

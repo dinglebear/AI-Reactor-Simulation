@@ -72,6 +72,9 @@ Write a script of 12 to 20 scenes that takes about four to six minutes to read a
 - Give the crew credit for teamwork, quick thinking and courage when it happened. Arguments make great scenes.
 - Each scene's t is the game time (seconds since 08:00) of its moment, scenes in time order, and zone is where it
   happens (a room id from the log, or empty for the whole site).
+- The spy's plans (events 'spy_plan': the opening plan and every change, each with the thought behind it) are the
+  spy's own private working ideas. Use them in the final scenes, after the outcome: what they first had in mind, and
+  where and why they changed course. Don't reveal a plan earlier than the moment it was made.
 - End with how the day ended: caught or not, the plant's fate, and the spy's last thought if there is one.
 Answer with the JSON object only."""
 

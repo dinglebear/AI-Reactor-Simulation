@@ -35,6 +35,8 @@ def main(argv=None):
     ap.add_argument("--concurrency", type=int, default=8, help="parallel API calls in live mode")
     ap.add_argument("--tempo", default="normal", choices=["normal", "fast", "max"],
                     help="how often agents think: fast = ~2x the turns per game minute, max = ~3x (for Max/API)")
+    ap.add_argument("--exit-interviews", action="store_true",
+                    help="after the game, ask every agent who they suspected and why (30 extra calls)")
     ap.add_argument("--spy-model", default=None, help="model for the spy only, e.g. claude-opus-5-5")
     ap.add_argument("--out", default="runs", help="parent folder for run directories")
     ap.add_argument("--movie", action="store_true",
@@ -52,7 +54,7 @@ def main(argv=None):
     run_dir = os.path.join(a.out, run_id)
     eng = Engine(seed=a.seed, saboteur=a.saboteur, mode=mode, run_dir=run_dir, human=human, speed=speed,
                  spoilers=a.spoilers, minutes=a.minutes, quiet=a.quiet, log_prompts=a.log_prompts,
-                 concurrency=a.concurrency)
+                 concurrency=a.concurrency, exit_interviews=a.exit_interviews)
     eng.run()
     if a.movie:
         from .movie import make_movie

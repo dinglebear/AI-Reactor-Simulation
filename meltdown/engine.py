@@ -35,11 +35,12 @@ HANDLER_BRIEF = ("Handler here. Years of cover come down to today. Unit 4 can't 
 class Engine:
     def __init__(self, seed=7, saboteur="random", mode="mock", run_dir="runs/latest", human="auto",
                  speed=0.0, spoilers=False, minutes=SHIFT_MINUTES, quiet=False, log_prompts=False,
-                 concurrency=8):
+                 concurrency=8, exit_interviews=False):
         self.rng = random.Random(seed)
         if saboteur == "random":
             saboteur = self.rng.choice(["RX", "HY", "IE", "SF"])
         self.seed, self.sab_dept, self.mode = seed, saboteur, mode
+        self.exit_interviews = exit_interviews
         self.log = RunLog(run_dir, log_prompts=log_prompts)
         self.world = World(seed, saboteur, self.log, rng=self.rng)
         self.brain = MockBrain(self.world) if mode == "mock" else self._live(concurrency)
@@ -171,6 +172,13 @@ class Engine:
             w.outcome = dict(result="SHIFT_END", winner="saboteur" if not passed else "nobody",
                              text=("Noon. The test " + ("passed" if passed else "failed") +
                                    f", and {w.people[w.saboteur_id].name} walked out the gate unidentified."))
+        if self.exit_interviews and self.mode != "mock" and hasattr(self.brain, "interview_batch"):
+            self.say("Exit interviews ...")
+            for p, ans in zip(list(w.people.values()), self.brain.interview_batch(list(w.people.values()))):
+                if ans:
+                    self.log.event(w.t, "exit_interview", f"{p.first}: suspected {ans.get('suspected')}. "
+                                   f"{ans.get('why', '')} | {ans.get('about_the_day', '')}", actor=p.id,
+                                   public=False, beat=0, suspected=ans.get("suspected"))
         if w.contaminated:
             names = ", ".join(F.ZONES[z]["name"] for z in w.contaminated)
             exposed = sum(1 for q in w.people.values() if q.exposed)
@@ -309,6 +317,13 @@ class Engine:
         allowed = actions_for(p)
         out = []
         p.scratchpad = (d.get("scratchpad") or p.scratchpad)[:SCRATCHPAD_CHARS]
+        plan = (d.get("plan") or "").strip()[:500]
+        if p.saboteur and plan and plan != w.spy_plan:
+            first = not w.spy_plans
+            w.spy_plans.append(dict(t=w.t, plan=plan, why=d.get("thought", "")[:400]))
+            w.spy_plan = plan
+            self.log.event(w.t, "spy_plan", ("Opening plan: " if first else "Plan changed: ") + plan, actor=p.id,
+                           public=False, beat=2 if first else 1, why=d.get("thought", "")[:400])
         pace = d.get("pace") if d.get("pace") in F.SPEEDS else "walk"
         ch = d.get("channel") or "none"
         if d.get("speech") and ch != "none":
@@ -515,7 +530,7 @@ class Engine:
                       else "incomplete", duration_s=w.t,
                       shift_start="08:00", frame_s=FRAME_EVERY_S, models=MODELS,
                       wall_s=round(time.time() - self.wall_start, 1),
-                      usage=getattr(self.brain, "usage", None)),
+                      usage=getattr(self.brain, "usage", None), spy_plans=w.spy_plans),
             zones={k: dict(v) for k, v in F.ZONES.items()},
             doors=[dict(a=a, b=b, xy=xy) for (a, b), xy in F.DOORS.items()],
             stations={k: dict(v) for k, v in F.STATIONS.items()},

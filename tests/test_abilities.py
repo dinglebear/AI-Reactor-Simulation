@@ -222,3 +222,23 @@ class DirectorDayAndCrew(unittest.TestCase):
     def test_spy_sees_earl_as_a_threat(self):
         from meltdown.agents.base import system_prompt
         self.assertIn("Earl Mabry: the real threat", system_prompt(self.w, self.w.people["U4-MGR-HY"]))
+
+
+class SpyPlan(unittest.TestCase):
+    def test_plan_is_logged_when_it_changes_and_only_the_spy_has_the_field(self):
+        from meltdown.agents.base import decision_schema, observation, exit_interview_prompt
+        eng = Engine(seed=10, mode="mock", run_dir="runs/test-plan", human="auto", speed=0.0, quiet=True,
+                     minutes=5, saboteur="SF")
+        w = eng.world
+        spy = w.people["U4-MGR-SF"]
+        self.assertIn("plan", decision_schema(["wait"], spy=True)["properties"])
+        self.assertNotIn("plan", decision_schema(["wait"])["properties"])
+        self.assertIn("haven't written down a plan", observation(w, spy))
+        base = dict(thought="t", speech="", channel="none", to="", actions=[], pace="walk", scratchpad="")
+        eng.apply(spy, dict(base, plan="Copy a guard's badge, then the vault."))
+        eng.apply(spy, dict(base, plan=""))                                     # empty keeps it
+        eng.apply(spy, dict(base, thought="Earl is watching me", plan="Lie low, frame Ray."))
+        self.assertEqual([x["plan"] for x in w.spy_plans], ["Copy a guard's badge, then the vault.", "Lie low, frame Ray."])
+        self.assertIn("Lie low", observation(w, spy))
+        w.outcome = dict(result="CUT_SHORT", winner="nobody", text="Ruth was the spy.")
+        self.assertNotIn("Ruth was the spy", exit_interview_prompt(w, w.people["U4-OP-01"]))

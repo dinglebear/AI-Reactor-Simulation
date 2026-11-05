@@ -135,6 +135,8 @@ class World:
         self.listen_log: list[dict] = []    # radio handset log: who tuned to which channel, when
         self.wipes: list[dict] = []         # deleted footage: the camera system's audit trail
         self.lockdown = False
+        self.spy_plan = ""
+        self.spy_plans: list[dict] = []     # every version of the spy's plan, with the thought behind each change
         self.test_reports: dict[int, dict] = {}
         self.watched: dict[int, float] = {}  # stage -> seconds the Director spent in the control room during it
         # the spy's contraband: an RFID badge copier, hidden in the Locker Room (no cameras) before the shift

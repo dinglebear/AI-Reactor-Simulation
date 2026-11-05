@@ -83,17 +83,17 @@ class ClaudeCodeBrain:
         self.limit_gate.set()
 
     # one turn ---------------------------------------------------------------------------------------------
-    def command(self, p):
-        schema = decision_schema(list(actions_for(p).keys()))
+    def command(self, p, schema=None):
+        schema = schema or decision_schema(list(actions_for(p).keys()), spy=p.saboteur)
         return [self.exe, "-p", "--model", model_for(p), "--effort", effort_for(p),
                 "--system-prompt", f"{self.shared}\n\n{system_prompt(self.w, p)}",
                 "--json-schema", json.dumps(schema), "--output-format", "json",
                 "--tools", "", "--strict-mcp-config", "--setting-sources", "project",
                 "--disable-slash-commands", "--no-session-persistence"]
 
-    async def _run(self, p, obs):
+    async def _run(self, p, obs, schema=None):
         proc = await asyncio.create_subprocess_exec(
-            *self.command(p), cwd=self.workdir, env=self.env, stdin=asyncio.subprocess.PIPE,
+            *self.command(p, schema), cwd=self.workdir, env=self.env, stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         out, err = await asyncio.wait_for(proc.communicate(obs.encode()), timeout=600)
         text = out.decode(errors="replace").strip()
@@ -163,6 +163,26 @@ class ClaudeCodeBrain:
         except Exception as e:  # still failing: the game must go on
             self.usage["fallback_to_mock"] += 1
             return self.mock.decide(p), dict(source="mock-fallback", error=f"{type(e).__name__}: {str(e)[:200]}")
+
+    def interview_batch(self, people):
+        """Exit interviews after the game: one short structured answer per person (waits out usage limits)."""
+        from .base import INTERVIEW_SCHEMA, exit_interview_prompt
+
+        async def one(p):
+            while True:
+                await self.limit_gate.wait()
+                try:
+                    async with self.sem:
+                        res = await self._run(p, exit_interview_prompt(self.w, p), INTERVIEW_SCHEMA)
+                    return self._decision(res)
+                except UsageLimit as e:
+                    await self._wait_for_reset(e)
+                except Exception:
+                    return None
+
+        async def run():
+            return await asyncio.gather(*(one(p) for p in people))
+        return self.loop.run_until_complete(run())
 
     def decide_batch(self, people):
         obs = [observation(self.w, p) for p in people]

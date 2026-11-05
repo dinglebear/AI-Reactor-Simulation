@@ -36,7 +36,7 @@ class LLMBrain:
 
     async def _call(self, p, obs):
         model = model_for(p)
-        schema = decision_schema(list(actions_for(p).keys()))
+        schema = decision_schema(list(actions_for(p).keys()), spy=p.saboteur)
         kw = dict(
             model=model,
             max_tokens=MAX_TOKENS[p.tier],
