@@ -168,6 +168,16 @@ def _route(a, b, ok):
     return None
 
 
+def door_rule(zone: str) -> str:
+    need = ZONES[zone]["reader"]
+    return {None: "no reader", "SEC": "security badges and L4 only", "L1-U": "custodians and L4 only"}.get(
+        need, f"{need} or higher")
+
+
+def reachable(clearances, zone: str) -> bool:
+    return any(can_open(c, zone) for c in clearances)
+
+
 def can_open(clearance: str, zone: str) -> bool:
     """Badge levels: L1, L1-U (custodian universal), L2, L3, L4, with optional -SEC suffix."""
     need = ZONES[zone]["reader"]

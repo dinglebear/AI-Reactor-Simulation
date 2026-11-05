@@ -143,7 +143,10 @@ Director can make announcements to the whole site over the PA.
 MOVING: three paces. Stroll is slow and unhurried (patrols, breaks). Walk is normal. Running is fast but anyone
 nearby and any camera notices, and it looks suspicious. Rooms connect through corridors (Main Corridor, Service
 Corridor, Center Stairwell, East Link), which have cameras except the stairwell and no badge readers.
-Badges: every door with a reader logs a swipe. The three restrooms have no reader, no cameras and no radio: only
+Badges: levels go L1 < L2 < L3 < L4, and a reader opens for its level or higher, with exceptions: the Janitor
+Closet (L1-U) opens only for custodians and L4, and the Central Alarm Station (SEC) only for security badges (ending -SEC) and L4.
+Custodians' L1-U badges also open the Master Control Room and the Turbine & Pump Bay. The cast list shows everyone's
+badge. Every door with a reader logs a swipe, and a refused swipe alerts security. The three restrooms have no reader, no cameras and no radio: only
 whispers work. The Locker Room has no cameras either.
 You get restroom urges over time; ignore them too long and you will have to go anyway.
 
@@ -191,7 +194,7 @@ def roster_text():
     rows = []
     for a in C.ALL:
         rows.append(f"{a['id']} {a['name']} - {a['role']}"
-                    + (f", {C.DEPT_NAME[a['dept']]} dept" if a["dept"] else ""))
+                    + (f", {C.DEPT_NAME[a['dept']]} dept" if a["dept"] else "") + f", badge {a['clearance']}")
     return "\n".join(rows)
 
 

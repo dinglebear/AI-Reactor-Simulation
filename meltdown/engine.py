@@ -156,6 +156,10 @@ class Engine:
             w.t += STEP_S
             if self.speed > 0:
                 time.sleep(max(0.0, STEP_S / self.speed - (time.time() - wall0)))
+        if not w.outcome and self.end_t < at("12:00"):
+            w.outcome = dict(result="CUT_SHORT", winner="nobody",
+                             text=f"Test run stopped at {hhmm(w.t)}, before the shift was over. "
+                                  f"{w.people[w.saboteur_id].name} was the spy.")
         if not w.outcome:
             passed = w.plant.test_passed()
             w.outcome = dict(result="SHIFT_END", winner="saboteur" if not passed else "nobody",
@@ -337,6 +341,10 @@ class Engine:
                 return "you can only order your own department"
             if arg not in F.STATIONS:
                 return "arg must be a station name"
+            z = F.STATIONS[arg]["zone"]
+            if not F.reachable(w.clearances(q), z):
+                return (f"{q.first}'s badge ({q.clearance}) can't open the {F.ZONES[z]['name']} ({F.door_rule(z)}). "
+                        "Order not sent.")
             q.order = arg if not arg.startswith("sinks") else None
             w.send(q, arg)
             w.deliver(q.id, p.first, f"[order] Go to {arg}.", "order", wake=True)
@@ -445,8 +453,9 @@ class Engine:
         path = self.log.write_replay(replay)
         self.log.close()
         self.say(f"\n{o['result']}: {o['text']}")
-        self.say(f"Test: " + ", ".join(f"{k} {v['minutes']}/{v['need']} {'PASS' if v['passed'] else 'FAIL'}"
-                                       for k, v in grade.items()))
+        ran = ", ".join(f"{k} {v['minutes']}/{v['need']} {'PASS' if v['passed'] else 'FAIL'}"
+                        for (k, v), st in zip(grade.items(), STAGES) if st["start"] < self.end_t)
+        self.say(f"Test: {ran or 'no stage started before the run stopped'}")
         self.say(f"Saboteur was {w.people[w.saboteur_id].name}. Replay: {path}")
         if getattr(self.brain, "usage", None):
             self.say(f"API usage: {self.brain.usage}")

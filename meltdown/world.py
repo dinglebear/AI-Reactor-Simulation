@@ -264,6 +264,9 @@ class World:
                     self.ev("door_denied", f"{p.first}'s badge was refused at {F.ZONES[zone]['name']}",
                             actor=p.id, zone=zone)
                     self.security_alert(f"Access denied: badge {badges[0]} at {zone}", zone)
+                    self.deliver(p.id, "Door", f"Your badge ({C.BY_ID[badges[0]]['clearance']}) doesn't open the "
+                                 f"{F.ZONES[zone]['name']} ({F.door_rule(zone)}). The refusal was logged.", "see",
+                                 wake=True)
                     return False
                 swiped = [use]
                 if self.high_alert and zone == "Z5":
@@ -669,6 +672,9 @@ class World:
             w = self.people.get(by or "")
             if not w or w.tier == "director" or w.detained:
                 return "name a staff member id in `arg` to send"
+            if not F.reachable(self.clearances(w), F.STATIONS[station]["zone"]):
+                return (f"{w.first}'s badge ({w.clearance}) can't open the {F.ZONES[F.STATIONS[station]['zone']]['name']} "
+                        f"({F.door_rule(F.STATIONS[station]['zone'])}). Send someone who can get in.")
             self.tasks[w.id] = dict(kind=kind, station=station, work_s=60 if kind == "inspect" else 90,
                                     report_to=director.id)
             w.order = station
