@@ -33,10 +33,14 @@ def main(argv=None):
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--log-prompts", action="store_true", help="store each agent's full observation in thoughts.jsonl")
     ap.add_argument("--concurrency", type=int, default=8, help="parallel API calls in live mode")
+    ap.add_argument("--tempo", default="normal", choices=["normal", "fast", "max"],
+                    help="how often agents think: fast = ~2x the turns per game minute, max = ~3x (for Max/API)")
     ap.add_argument("--out", default="runs", help="parent folder for run directories")
     ap.add_argument("--movie", action="store_true",
                     help="after the game, have Claude write the narrated movie (same mode as the game)")
     a = ap.parse_args(argv)
+    from .config import set_tempo
+    set_tempo(a.tempo)
     mode = "live" if a.live else "claude-code" if a.claude_code else "mock"
     human = a.human or ("auto" if mode == "mock" else "ask")
     speed = a.speed if a.speed is not None else (0.0 if mode == "mock" else 30.0)

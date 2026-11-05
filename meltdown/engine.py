@@ -16,7 +16,7 @@ from .narrator import build_story
 from .plant import stage_at, STAGES
 from .world import World
 
-INVESTIGATIONS = ("audit_badges", "pull_cctv", "inspect", "cross_check", "interview", "read_radio")
+INVESTIGATIONS = ("audit_badges", "pull_cctv", "inspect", "cross_check", "interview", "read_radio", "search")
 
 CORPORATE = [   # default CEO lines (Travis plays Gordon Pike live; batch runs use these)
     (at("08:02"), "Simone, Gordon. Your $250,000 executive bonus rides on a clean pass today. One more thing: HR "
@@ -55,7 +55,9 @@ class Engine:
     def _live(self, concurrency):
         if self.mode == "claude-code":
             from .agents.claude_code import ClaudeCodeBrain
-            return ClaudeCodeBrain(self.world, concurrency=min(concurrency, 4), say=print)
+            from . import config
+            cap = config.TEMPO[config.TEMPO_NOW]["cc_concurrency"]
+            return ClaudeCodeBrain(self.world, concurrency=min(concurrency, cap), say=print)
         from .agents.llm import LLMBrain
         return LLMBrain(self.world, concurrency=concurrency)
 
@@ -362,6 +364,19 @@ class Engine:
             return r
         if typ == "interact":
             return w.interact(p, tgt, arg.strip().lower())
+        if typ == "listen_in":
+            return w.listen_in(p, tgt or arg)
+        if typ == "hide":
+            return w.hide(p, arg, text)
+        if typ == "retrieve":
+            return w.retrieve(p)
+        if typ == "rummage":
+            if p.activity == "moving":
+                return "stop somewhere first"
+            r = w.rummage(p)
+            self.log.event(w.t, "rummage", f"{p.first} looked around the {F.ZONES[p.zone]['name']}: {r}", actor=p.id,
+                           zone=p.zone, public=False, beat=1)
+            return r
         if typ == "ask_badge":
             return w.ask_badge(p, tgt, text or None)
         if typ == "return_badge":

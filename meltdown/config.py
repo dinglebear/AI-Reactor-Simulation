@@ -16,6 +16,26 @@ FRAME_EVERY_S = 15              # replay frame cadence
 THINK_EVERY_S = {"director": 300, "manager": 240, "staff": 180}
 MIN_GAP_S = 45                  # an early wake never comes sooner than this after the last turn
 
+# Tempo presets: how often agents think. "fast"/"max" cost 2-3x the calls per game minute (for a Max plan or an
+# API key), but people react to a whisper or an alarm within seconds of game time instead of a minute or more.
+TEMPO = {
+    "normal": dict(think={"director": 300, "manager": 240, "staff": 180}, min_gap=45, cc_concurrency=4),
+    "fast": dict(think={"director": 150, "manager": 120, "staff": 90}, min_gap=25, cc_concurrency=6),
+    "max": dict(think={"director": 90, "manager": 75, "staff": 60}, min_gap=15, cc_concurrency=8),
+}
+TEMPO_NOW = "normal"
+
+
+def set_tempo(name: str):
+    """Switch tempo in place (the engine and world read these at call time)."""
+    global MIN_GAP_S, TEMPO_NOW
+    t = TEMPO[name]
+    THINK_EVERY_S.clear()
+    THINK_EVERY_S.update(t["think"])
+    MIN_GAP_S = t["min_gap"]
+    TEMPO_NOW = name
+    return t
+
 SCRATCHPAD_CHARS = 250
 INBOX_LIMIT = 8
 NEARBY_EVENTS = 8

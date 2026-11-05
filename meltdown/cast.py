@@ -200,3 +200,65 @@ def opinions(seed: int) -> dict:
                 mine[b] = (feel, rep)
         out[a["id"]] = mine
     return out
+
+
+# ---------------------------------------------------------------- the spy's read on people
+# The spy spent years as a manager, trained by the handler to read people. This is information, not a plan:
+# what each kind of person notices, what they want, and where they give. The spy decides what to do with it.
+SPY_READ = {
+    "Paranoid Skeptic": "notices who is where and says it out loud: your most dangerous witness. But they suspect "
+                        "everyone, so management is used to tuning them out, and they will chase any lead you hand them.",
+    "Weary Veteran": "hard to fool on the plant itself and slow to panic. Respects competence, distrusts corporate; "
+                     "will believe a story that blames corporate pressure.",
+    "Daydreamer": "misses what happens in front of them and remembers it hours later, vaguely. A poor witness either way.",
+    "Corporate Yes-Man": "does what the last senior voice told them, without asking why, and repeats it as fact.",
+    "Panic-Monster": "one nudge and they shout it to the whole site. Nobody believes their alarms, which cuts both ways.",
+    "Chaos Prankster": "loves a juicy rumour and spreads it with their own twist. Everyone knows they make things up, "
+                       "so anything traced back to them gets laughed off.",
+    "Hot-Head": "blames the other shift and the other department first; easy to aim, hard to calm. Honest, so "
+                "people believe their anger.",
+    "Bureaucratic Slacker": "away from their post and in the restroom a lot; a natural scapegoat for anything that "
+                            "happened at an empty station.",
+    "People Pleaser": "can't say no to a manager: will lend a badge, leave a station or keep quiet if asked kindly. "
+                      "Feels guilty after and may confess if pressed.",
+    "Friendly Optimist": "assumes the best of everyone, especially managers; reads any alarm as a drill.",
+    "Literal Robot": "reports exact readings and exactly what they saw, to anyone who asks. Cannot be talked round.",
+    "Perfectionist": "chases every small discrepancy until it's explained; a tidy explanation from a manager settles them.",
+    "Brown-Noser": "reports colleagues to look good; feed them a name and it reaches the Director within minutes.",
+    "Spooky Mystic": "senses trouble and talks in riddles about it. People half-listen, and sometimes they're right.",
+    "Quiet Quitter": "sees plenty, reports nothing unless forced. Won't go out of their way to help anyone.",
+}
+SPY_READ_PERSON = {
+    "U4-DIR": "Simone Hart: methodical, wants two kinds of proof before she acts, and is under corporate pressure "
+              "she resents. She leans on her managers' SitReps; what the managers tell her shapes where she looks.",
+    "U4-MGR-RX": "Elena Voss: proud and impatient; second-guessing her makes her dig in. Wants the Director's chair.",
+    "U4-MGR-HY": "Frank Delacroix: warm and disorganised, needs the bonus for his daughter's college; will push "
+                 "through a scare rather than lose it.",
+    "U4-MGR-IE": "Mei Lin Park: careful, slow to decide, stops anything that doesn't add up; hates signing numbers she "
+                 "doesn't believe.",
+    "U4-MGR-SF": "Ruth Abara: the most trusted person on site; runs the cameras and guards. Protective of her people, "
+                 "so an accusation against one of them makes her defensive.",
+}
+
+
+def spy_dossier(spy_id: str, ops: dict) -> str:
+    """The spy's private read on everyone, plus the grudges and soft spots they've picked up over the years."""
+    rows = []
+    for a in ALL:
+        if a["id"] == spy_id:
+            continue
+        tag, _ = MOTIVE[a["id"]]
+        read = SPY_READ_PERSON.get(a["id"]) or f"{first(a['name'])}: {SPY_READ[a['archetype']]}"
+        rows.append(f"- {a['id']} {read} Wants: {tag}.")
+    grudges = []
+    for holder, mine in ops.items():
+        if holder == spy_id:
+            continue
+        for other, (feel, txt) in mine.items():
+            if other != spy_id and txt in [t for _, t in TWISTS] and feel in ("warm", "cold"):
+                grudges.append(f"{first(BY_ID[holder]['name'])}'s view of {first(BY_ID[other]['name'])}: \"{txt}\"")
+    import random
+    random.Random(len(grudges)).shuffle(grudges)
+    return ("YOUR READ ON PEOPLE (years of managing them and quietly studying them; nobody knows how well you read "
+            "them):\n" + "\n".join(rows) + "\nWHAT YOU'VE PICKED UP ABOUT WHO LIKES OR RESENTS WHOM:\n- "
+            + "\n- ".join(grudges[:18]))

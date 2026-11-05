@@ -25,8 +25,19 @@ STAFF_ACTIONS = {
               "text = what you say",
 }
 STAFF_ACTIONS["respond"] = RESPOND_TEXT
+STAFF_ACTIONS.update({
+    "listen_in": "tune your radio to a channel that isn't yours for 10 minutes. target = RX, HY, IE, SF, exec or "
+                 "security (or 'off'). The chatter comes out of your radio, so people next to you may notice. "
+                 "Radios log which channel each handset is on.",
+    "hide": "hide something where you are standing. arg = 'badges' to stash borrowed badges, or describe the thing "
+            "in text. Cameras and people in the room may see you do it. Not while moving.",
+    "retrieve": "take back what you hid in this room",
+    "rummage": "look around this room for anything someone hid",
+})
 MANAGER_ACTIONS = dict(STAFF_ACTIONS, order="send one of your staff somewhere. target = person id, arg = station name")
 SECURITY_MANAGER_EXTRA = {
+    "search": "send a guard to find a person (target = person id; they check the person's pockets) or to sweep a "
+              "room for hidden things (target = zone id). The call goes out on the security channel.",
     "audit_badges": "review the badge ledger for contradictions",
     "pull_cctv": "review camera footage. target = zone id (Z1..Z8)",
 }
@@ -49,7 +60,12 @@ DIRECTOR_ACTIONS = {
     "cross_check": "INVESTIGATION. Send someone to the test bench to compare true readings with the console. "
                    "arg = person id",
     "interview": "INVESTIGATION. Summon a person to your desk for questions. target = person id",
-    "read_radio": "INVESTIGATION. Read a department's raw radio traffic. target = RX, HY, IE or SF",
+    "read_radio": "INVESTIGATION. Read a department's raw radio traffic and its handset log (who else was tuned "
+                  "in). target = RX, HY, IE, SF, exec or security",
+    "search": "INVESTIGATION. Call a search. target = person id: CAS locates them (cameras, else their last badge "
+              "swipe) within a minute and a guard goes to check their pockets. target = zone id: a guard sweeps "
+              "that room for hidden things. arg = a guard's id (optional). The call goes out on the security "
+              "channel, so anyone on it hears who is wanted.",
     "accuse": "arrest someone as the saboteur. target = person id, text = your case. Justified only with two "
               "different clue types pointing at them. Two wrong arrests and you lose.",
     "scram": "shut the unit down. Ends the game; the test fails. Corporate only forgives it if the danger was real.",
@@ -220,8 +236,11 @@ def system_prompt(world, p) -> str:
                 "everything: keep acting like the manager everyone knows. The 'what you want today' above is what "
                 "everyone believes about you; it is your cover, not your real goal.\n"
                 + SPY_SECRET + "\n"
+                "The clock is part of the job: a spy who waits for a perfect moment that never comes fails the "
+                "handler just as surely as one who gets caught.\n"
                 "How you go about it is up to you. The rules above tell you how the plant, the stations, badges, "
-                "cameras and alarms work; nobody will tell you a plan.")
+                "cameras, radios and alarms work; nobody will tell you a plan. Think like the professional you are "
+                "and come up with your own.\n\n" + C.spy_dossier(p.id, world.opinions))
     elif p.tier == "manager":
         goal = ("GOAL: keep your department's system healthy, help pass the test, and send the Director honest "
                 "SitReps on the exec channel.")
