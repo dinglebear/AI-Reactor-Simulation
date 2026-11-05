@@ -46,6 +46,9 @@ SABOTEUR_EXTRA = {
                "looking like help. People working next to you may notice the numbers drop whenever you touch it.",
     "ask_badge": "quietly ask someone in your zone to lend you their badge. target = person id, text = your excuse",
     "return_badge": "hand back borrowed badges to their owners in the same zone",
+    "clone_badge": "copy the badge of someone in your room with your RFID copier (you must be carrying it). target "
+                   "= person id. Takes a second up close; they keep their badge and don't know. Doors then open for "
+                   "the copy, logged under their name. People nearby or a camera may catch the moment.",
     "message_handler": "send a private message to your handler outside the plant. text = message. The game pauses "
                        "until they reply.",
 }
@@ -201,7 +204,10 @@ DIRECTOR_SECRET = ("ONLY YOU KNOW THIS (the crew does not): one of the four depa
                    "everything, some only say what you want to hear.\n"
                    "THE TEST RIG will set off these planned alarms (the crew hears them as ordinary alarms, unless "
                    "someone tells them):\n")
-SPY_SECRET = ("Your moves can leave clues (badge ledger, cameras, station logs, witness testimony, radio), and the "
+SPY_SECRET = ("CONTRABAND: you own an RFID badge copier. Being found with it ends your cover, so it lives hidden: "
+              "right now it is tucked away in the Locker Room (Z10, no cameras). Use retrieve there to pick it up, and "
+              "hide it again when you don't need it. A guard search or a room sweep can find it.\n"
+              "Your moves can leave clues (badge ledger, cameras, station logs, witness testimony, radio), and the "
               "Director can arrest you with two different types of them. The crew thinks today is just a test day; "
               "nobody has said anything about a spy.")
 
@@ -320,6 +326,16 @@ def observation(world, p) -> str:
             else "you are under real suspicion"
         lines.append(f"[secret] True MELTDOWN {world.plant.incident:.0f}. Stations: {cds}. Heat: {mood}."
                      + (f" You carry borrowed badges: {', '.join(p.extra_badges)}." if p.extra_badges else ""))
+        if world.has_copier(p):
+            lines.append("[secret] You are carrying the RFID copier." + (
+                f" Copied badges on you: {', '.join(world.people[b].first for b in p.clones)}." if p.clones else ""))
+        else:
+            st = next((x for x in world.stashes if x["who"] == p.id and not x["found"] and world.COPIER in x["items"]),
+                      None)
+            lines.append(f"[secret] Your RFID copier is hidden in the {F.ZONES[st['zone']]['name']} ({st['zone']})."
+                         if st else "[secret] Your RFID copier is gone: someone found it.")
+            if p.clones:
+                lines.append(f"[secret] Copied badges on you: {', '.join(world.people[b].first for b in p.clones)}.")
     if p.lent_to:
         lines.append(f"You lent your badge to {world.people[p.lent_to].first}. Doors with readers won't open for you.")
     if p.pending:

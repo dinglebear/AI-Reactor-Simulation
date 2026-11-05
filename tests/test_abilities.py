@@ -96,3 +96,41 @@ class LimitMessages(unittest.TestCase):
         now = dt.datetime(2026, 11, 5, 5, 0, tzinfo=dt.timezone.utc).timestamp()
         self.assertEqual(reset_from_clock(msg, now) - now, 2 * 3600 + 40 * 60)
         self.assertFalse(LIMIT_RE.search("claude exited 1"))
+
+
+class Copier(unittest.TestCase):
+    def setUp(self):
+        self.eng = Engine(seed=6, mode="mock", run_dir="runs/test-copier", human="auto", speed=0.0, quiet=True,
+                          minutes=5, saboteur="RX")
+        self.w = self.eng.world
+        self.spy = self.w.people["U4-MGR-RX"]
+
+    def test_copier_starts_hidden_then_clones_and_gets_confiscated(self):
+        from meltdown.agents.base import observation
+        w, spy = self.w, self.spy
+        self.assertIn("hidden in the Locker Room", observation(w, spy))
+        self.assertIn("RFID copier", self.eng.do(spy, "clone_badge", "U4-OP-01", "", "", "walk"))  # not carrying
+        spy.zone, spy.activity = w.COPIER_ZONE, "working"
+        self.assertIn("RFID badge copier", w.retrieve(spy))
+        guard = w.people["U4-SEC-07"]
+        guard.zone = spy.zone
+        r = self.eng.do(spy, "clone_badge", guard.id, "", "", "walk")
+        self.assertIn("copied", r)
+        self.assertIn("U4-SEC-07", spy.holds())
+        self.assertEqual(guard.badge, "U4-SEC-07")          # the owner keeps theirs
+        self.assertIn("L4-SEC", w.clearances(spy))
+        # hide the copier, a sweep finds it
+        self.assertIn("hidden", w.hide(spy, "", "the copier"))
+        self.assertFalse(w.has_copier(spy))
+        w.retrieve(spy)
+        w.frisk(guard, spy, w.director.id)
+        self.assertFalse(w.has_copier(spy))
+        self.assertEqual(spy.clones, [])
+        self.assertTrue(any(c.type == "physical" and "copier" in c.text for c in w.clues))
+
+    def test_crew_never_hears_of_the_copier(self):
+        from meltdown.agents.base import system_prompt, shared_prompt
+        self.assertNotIn("copier", shared_prompt().lower())
+        for p in self.w.people.values():
+            if not p.saboteur:
+                self.assertNotIn("copier", system_prompt(self.w, p).lower(), p.id)

@@ -391,6 +391,8 @@ class Engine:
             return w.listen_in(p, tgt or arg)
         if typ == "hide":
             return w.hide(p, arg, text)
+        if typ == "clone_badge":
+            return w.clone_badge(p, tgt)
         if typ == "retrieve":
             return w.retrieve(p)
         if typ == "rummage":

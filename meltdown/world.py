@@ -54,6 +54,7 @@ class Person:
     order: str | None = None       # last order from a manager / Director
     listening: dict = field(default_factory=dict)  # channel -> until (eavesdropping on a channel that isn't yours)
     carrying: list = field(default_factory=list)   # small things picked up or taken (not badges)
+    clones: list = field(default_factory=list)     # badge ids copied with the RFID copier (the owner keeps theirs)
 
     @property
     def first(self):
@@ -65,7 +66,8 @@ class Person:
         return model_for(self)
 
     def holds(self):
-        return ([self.badge] if self.badge else []) + list(self.extra_badges)
+        return ([self.badge] if self.badge else []) + list(self.extra_badges) + [c for c in self.clones
+                                                                                 if c not in self.extra_badges]
 
 
 @dataclass
@@ -125,6 +127,9 @@ class World:
         self.presence: list[tuple[float, str, str, str]] = []      # (t, person, zone, station) samples
         self.stashes: list[dict] = []       # things people hid: zone, who, t, badges, items, found
         self.listen_log: list[dict] = []    # radio handset log: who tuned to which channel, when
+        # the spy's contraband: an RFID badge copier, hidden in the Locker Room (no cameras) before the shift
+        self.stashes.append(dict(id="S0", zone=self.COPIER_ZONE, who=self.saboteur_id, t=-86400, badges=[],
+                                 clones=[], items=[self.COPIER], found=False))
 
     # ------------------------------------------------------------------ helpers
     def in_zone(self, zone, exclude=None):
@@ -189,7 +194,7 @@ class World:
             self.ev("break", f"{kind.capitalize()} break: {', '.join(names)} head off to {where}.", beat=1)
 
     def clearances(self, p):
-        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges if b in self.people]
+        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges + p.clones if b in self.people]
 
     @staticmethod
     def nearest_restroom(zone):
@@ -809,7 +814,12 @@ class World:
         found = []
         if who.extra_badges:
             found.append("badges that aren't theirs (" + ", ".join(self.people[b].name for b in who.extra_badges) + ")")
+        if who.clones:
+            found.append("blank cards copied from the badges of " + ", ".join(self.people[b].name for b in who.clones))
         found += who.carrying
+        if self.COPIER in who.carrying:     # contraband is confiscated, along with what it made
+            who.carrying.remove(self.COPIER)
+            who.clones = []
         self.deliver(who.id, g.first, f"(in person) {g.first} stops you: \"Director's orders, quick check of your "
                      "pockets.\"" + (f" {g.first} finds: {'; '.join(found)}." if found else " Nothing turns up."),
                      "say", wake=True)
@@ -1014,6 +1024,42 @@ class World:
 
     # ------------------------------------------------------------------ eavesdropping and hiding
     LISTEN_S = 600
+    COPIER = "RFID badge copier (contraband)"
+    COPIER_ZONE = "Z10"
+
+    def has_copier(self, p):
+        return self.COPIER in p.carrying
+
+    def clone_badge(self, p: Person, target: str):
+        """Copy someone's badge by standing close to them with the copier. They keep their badge."""
+        if not self.has_copier(p):
+            return "you need your RFID copier on you (retrieve it from where it's hidden)"
+        t = self.people.get(target or "")
+        if not t or t.id == p.id or t.zone != p.zone or t.detained:
+            return "clone_badge needs someone in the same room as you"
+        if not t.badge:
+            return f"{t.first} isn't carrying a badge right now"
+        if t.badge in p.clones:
+            return f"you already have a copy of {t.first}'s badge"
+        p.clones.append(t.badge)
+        self.ev("clone", f"{p.first} copied {t.first}'s badge with the RFID copier", actor=p.id, zone=p.zone,
+                public=False, beat=3, target=t.id)
+        for q in self.in_zone(p.zone, exclude=p.id):
+            if q.activity == "restroom" and p.activity != "restroom":
+                continue
+            pr = self.NOTICE_P.get(q.group, 0.5) * (0.25 if q.id != t.id else 0.15)
+            if self.rng.random() < pr:
+                self.add_clue("testimony", p.zone, None, f"{q.first} saw {p.first} stand oddly close to "
+                              f"{t.first} at {hhmm(self.t)} with a small device in hand.", [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"{p.first} stood oddly close to {'you' if q.id == t.id else t.first} "
+                             "for a moment, holding something small.", "see")
+                p.suspicion += 2
+                self.sab_heat += 3
+        if F.ZONES[p.zone]["cctv"] and self.rng.random() < 0.5:
+            self.add_clue("cctv", p.zone, None, f"Camera in {F.ZONES[p.zone]['name']} at {hhmm(self.t)}: "
+                          f"{p.first} brushes past {t.first}, something small in hand.", [p.id])
+        return (f"copied {t.first}'s badge ({t.clearance}). Doors will open for it, and the ledger will log "
+                f"{t.first}'s name")
 
     @staticmethod
     def channel_name(key):
@@ -1068,20 +1114,28 @@ class World:
     def hide(self, p: Person, what: str, text: str):
         if p.activity == "moving":
             return "you can't hide anything on the move; stop somewhere first"
-        badges = list(p.extra_badges) if (what or "").lower().startswith("badge") else []
+        is_badges = (what or "").lower().startswith("badge")
+        badges = list(p.extra_badges) if is_badges else []
+        clones = list(p.clones) if is_badges else []
         items = []
-        if not badges:
+        if not is_badges:
             desc = (text or what or "").strip()[:120]
             if not desc:
                 return "say what you hide: arg = badges, or text = what it is"
-            items = [desc]
-            p.carrying = [c for c in p.carrying if c.lower() not in desc.lower()]
+            low = desc.lower()
+            match = [c for c in p.carrying if c.lower() in low or low in c.lower()
+                     or ("copier" in low and c == self.COPIER)]
+            items = match or [desc]
+            p.carrying = [c for c in p.carrying if c not in match]
+        elif not badges and not clones:
+            return "you have no extra badges on you"
         for b in badges:
             p.extra_badges.remove(b)
-        st = dict(id=f"S{len(self.stashes) + 1}", zone=p.zone, who=p.id, t=self.t, badges=badges, items=items,
-                  found=False)
+        p.clones = [c for c in p.clones if c not in clones]
+        st = dict(id=f"S{len(self.stashes) + 1}", zone=p.zone, who=p.id, t=self.t, badges=badges, clones=clones,
+                  items=items, found=False)
         self.stashes.append(st)
-        what_s = ("borrowed badges (" + ", ".join(self.people[b].first for b in badges) + ")") if badges else items[0]
+        what_s = ("badges (" + ", ".join(self.people[b].first for b in badges + clones) + ")") if is_badges else items[0]
         self.ev("hide", f"{p.first} hid {what_s} in the {F.ZONES[p.zone]['name']}", actor=p.id, zone=p.zone,
                 public=False, beat=2, stash=st["id"])
         if F.ZONES[p.zone]["cctv"]:
@@ -1103,8 +1157,10 @@ class World:
         for s in mine:
             s["found"] = True
             p.extra_badges += s["badges"]
+            p.clones += s.get("clones", [])
             p.carrying += s["items"]
-            got += [self.people[b].first + "'s badge" for b in s["badges"]] + s["items"]
+            got += [self.people[b].first + "'s badge" for b in s["badges"]] + [
+                "a copy of " + self.people[b].first + "'s badge" for b in s.get("clones", [])] + s["items"]
         self.ev("retrieve", f"{p.first} took back {', '.join(got)}", actor=p.id, zone=p.zone, public=False, beat=1)
         return "you have " + ", ".join(got)
 
@@ -1117,8 +1173,12 @@ class World:
         out = []
         for s in hits:
             s["found"] = True
-            what = ("badges belonging to " + ", ".join(self.people[b].name for b in s["badges"])) if s["badges"] \
-                else s["items"][0]
+            parts = []
+            if s["badges"]:
+                parts.append("badges belonging to " + ", ".join(self.people[b].name for b in s["badges"]))
+            if s.get("clones"):
+                parts.append("blank cards copied from the badges of " + ", ".join(self.people[b].name for b in s["clones"]))
+            what = "; ".join(parts + s["items"])
             pool = self.present_during(s["zone"], s["t"] - 120, s["t"] + 120) or [s["who"]]
             if s["who"] not in pool:
                 pool.append(s["who"])

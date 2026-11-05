@@ -114,6 +114,16 @@ saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if M
 | retrieve | take back what you hid in this room | |
 | rummage | look around the room for anything someone hid | finds become physical clues you hold, and tell the Director if interviewed |
 
+## The spy's contraband: an RFID badge copier
+
+The spy owns a badge copier. It starts hidden in the Locker Room (no cameras), and the spy has to `retrieve` it
+before using it. `clone_badge` copies the badge of someone in the same room. The owner keeps theirs and doesn't
+know. Doors then open for the copy, and the ledger logs the owner's name (an IMPOSSIBLE_LOCATION ledger clue if the
+owner is on camera somewhere else). The moment of copying may be seen by people nearby or caught on camera. If the
+copier is found in a pocket check, it is confiscated along with every copy (a physical clue). A room sweep or a
+rummage can also find it where it's hidden, so the spy decides when to carry it and when to stash it. Only the spy
+is told the copier exists.
+
 ## The spy's read on people
 
 The spy was a manager for years and trained to read people, so their prompt has a private dossier: what each
