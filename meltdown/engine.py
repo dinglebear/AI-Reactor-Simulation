@@ -391,6 +391,8 @@ class Engine:
             return w.listen_in(p, tgt or arg)
         if typ == "hide":
             return w.hide(p, arg, text)
+        if typ == "wipe_cctv":
+            return w.wipe_cctv(p, tgt)
         if typ == "clone_badge":
             return w.clone_badge(p, tgt)
         if typ == "retrieve":

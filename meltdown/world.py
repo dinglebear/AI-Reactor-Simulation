@@ -127,6 +127,7 @@ class World:
         self.presence: list[tuple[float, str, str, str]] = []      # (t, person, zone, station) samples
         self.stashes: list[dict] = []       # things people hid: zone, who, t, badges, items, found
         self.listen_log: list[dict] = []    # radio handset log: who tuned to which channel, when
+        self.wipes: list[dict] = []         # deleted footage: the camera system's audit trail
         # the spy's contraband: an RFID badge copier, hidden in the Locker Room (no cameras) before the shift
         self.stashes.append(dict(id="S0", zone=self.COPIER_ZONE, who=self.saboteur_id, t=-86400, badges=[],
                                  clones=[], items=[self.COPIER], found=False))
@@ -302,6 +303,8 @@ class World:
             p.wait_until = max(p.wait_until, self.t) + F.AIRLOCK_S
         if self.high_alert and zone in F.GUARDED:
             p.wait_until = max(p.wait_until, self.t) + F.HIGH_ALERT_CHECK_S
+        if reader and F.ZONES[zone]["cctv"]:
+            self.cctv_log.append(dict(t=self.t, zone=zone, who=p.id, what="entered"))
         p.zone = zone
         for b in p.holds():          # exit readers: the ledger follows badges through every door
             self.ledger.badge_zone[b] = zone
@@ -648,6 +651,13 @@ class World:
     # ------------------------------------------------------------------ investigations
     def investigate(self, director: Person, kind: str, target: str | None, by: str | None):
         """Director (or Security manager) investigation actions. Results arrive later in their inbox."""
+        if kind == "audit_badges" and target in F.ZONES:
+            rows = [r for r in self.ledger.rows if r["zone"] == target and r["t"] > self.t - 1800][-15:]
+            text = f"Door ledger, {F.ZONES[target]['name']}, last 30 min: " + (", ".join(
+                f"{self.people[r['badge']].first}'s badge {hhmm(r['t'])}{'' if r['granted'] else ' (refused)'}"
+                for r in rows) or "no swipes")
+            self.pending_results.append((self.t + 60, director.id, dict(frm="Badge office", text=text)))
+            return "pulling the door ledger (1 min)"
         if kind == "audit_badges":
             found = [c for c in self.clues if c.type == "ledger" and not c.found]
             alerts = [r for r in self.ledger.rows[-300:] if r["alerts"] or not r["granted"]]
@@ -670,12 +680,22 @@ class World:
             found = [] if corrupted else [c for c in self.clues if c.type == "cctv" and c.zone == z and not c.found]
             for c in found:
                 self.reveal(c, director.id, director.id)
-            runs = [s for s in self.cctv_log if s["zone"] == z and s["t"] > self.t - 1800]
+            recent = [s for s in self.cctv_log if s["zone"] == z and s["t"] > self.t - 1800]
+            runs = [s for s in recent if s["what"] == "running"]
+            entries = [s for s in recent if s["what"] == "entered"][-12:]
+            gaps = [wp for wp in self.wipes if wp["zone"] == z and wp["t"] > self.t - 3600]
+            for wp in gaps:
+                c = next((c for c in self.clues if c.id == wp["clue"]), None)
+                if c and not corrupted:
+                    found.append(c)
+                    self.reveal(c, director.id, director.id)
             text = f"CCTV {z} last 30 min: " + (
                 "footage is corrupted (security systems degraded)." if corrupted else
                 ("; ".join(c.text for c in found) or "nothing unusual") +
                 (f". Running seen: {', '.join(sorted({self.people[s['who']].first for s in runs}))}"
-                 if runs else ""))
+                 if runs else "") +
+                (f". Came in through the door on camera: " + ", ".join(
+                    f"{self.people[s['who']].first} {hhmm(s['t'])}" for s in entries) if entries and not corrupted else ""))
             self.pending_results.append((self.t + 60, director.id, dict(frm="CAS", text=text)))
             return "pulling footage (1 min)"
         if kind in ("inspect", "cross_check"):
@@ -1027,6 +1047,39 @@ class World:
     COPIER = "RFID badge copier (contraband)"
     COPIER_ZONE = "Z10"
 
+    WIPE_STATIONS = ("director_desk", "cas_desk")
+
+    def wipe_cctv(self, p: Person, zone: str):
+        """Delete recent footage for a zone from the Director's or the alarm station's terminal."""
+        if p.station not in self.WIPE_STATIONS:
+            return "you must be at the Director's desk or the alarm station desk (move there)"
+        if self.occupants(p.station, exclude=p.id):
+            return f"someone else is at the {F.STATIONS[p.station]['label']}; they'd see the screen"
+        zone = (zone or "").strip()
+        if zone not in F.ZONES or not F.ZONES[zone]["cctv"]:
+            return "wipe_cctv needs a zone id with cameras, like Z5"
+        t0 = self.t - 1800
+        gone = [c for c in self.clues if c.type == "cctv" and c.zone == zone and not c.found and c.t >= t0]
+        for c in gone:
+            self.clues.remove(c)
+            self.log.clue(self.t, c, "deleted", by=p.id)
+        self.cctv_log = [r for r in self.cctv_log if not (r["zone"] == zone and r["t"] >= t0)]
+        label = F.STATIONS[p.station]["label"]
+        # the camera system keeps its own audit trail: whoever was in the room at the time fits
+        pool = [q.id for q in self.in_zone(p.zone)] or [p.id]
+        trace = self.add_clue("paper", p.zone, p.station, f"Camera system audit log: footage for "
+                              f"{F.ZONES[zone]['name']} from {hhmm(t0)} to {hhmm(self.t)} was deleted at the {label} "
+                              f"at {hhmm(self.t)}. Anyone in the {F.ZONES[p.zone]['name']} then fits.", pool)
+        self.wipes.append(dict(t=self.t, zone=zone, t0=t0, clue=trace.id, by=p.id, at=p.station))
+        self.ev("wipe_cctv", f"{p.first} deleted {F.ZONES[zone]['name']} footage at the {label} "
+                f"({len(gone)} camera clues gone)", actor=p.id, zone=p.zone, public=False, beat=3, target_zone=zone)
+        for q in self.in_zone(p.zone, exclude=p.id):
+            if q.activity != "restroom" and self.rng.random() < self.NOTICE_P.get(q.group, 0.5) * 0.3:
+                self.add_clue("testimony", p.zone, p.station, f"{q.first} saw {p.first} on the camera menus at the "
+                              f"{label} around {hhmm(self.t)}.", [p.id], holder=q.id)
+                self.deliver(q.id, "eyes", f"You notice {p.first} working the camera menus at the {label}.", "see")
+        return f"deleted the last 30 minutes of {F.ZONES[zone]['name']} footage ({len(gone)} things on it)"
+
     def has_copier(self, p):
         return self.COPIER in p.carrying
 
@@ -1047,7 +1100,7 @@ class World:
         for q in self.in_zone(p.zone, exclude=p.id):
             if q.activity == "restroom" and p.activity != "restroom":
                 continue
-            pr = self.NOTICE_P.get(q.group, 0.5) * (0.25 if q.id != t.id else 0.15)
+            pr = self.NOTICE_P.get(q.group, 0.5) * (0.08 if q.id != t.id else 0.05)   # done casually, it looks like supervising
             if self.rng.random() < pr:
                 self.add_clue("testimony", p.zone, None, f"{q.first} saw {p.first} stand oddly close to "
                               f"{t.first} at {hhmm(self.t)} with a small device in hand.", [p.id], holder=q.id)
@@ -1055,7 +1108,7 @@ class World:
                              "for a moment, holding something small.", "see")
                 p.suspicion += 2
                 self.sab_heat += 3
-        if F.ZONES[p.zone]["cctv"] and self.rng.random() < 0.5:
+        if F.ZONES[p.zone]["cctv"] and self.rng.random() < 0.2:
             self.add_clue("cctv", p.zone, None, f"Camera in {F.ZONES[p.zone]['name']} at {hhmm(self.t)}: "
                           f"{p.first} brushes past {t.first}, something small in hand.", [p.id])
         return (f"copied {t.first}'s badge ({t.clearance}). Doors will open for it, and the ledger will log "

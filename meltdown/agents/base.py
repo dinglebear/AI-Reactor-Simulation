@@ -47,8 +47,12 @@ SABOTEUR_EXTRA = {
     "ask_badge": "quietly ask someone in your zone to lend you their badge. target = person id, text = your excuse",
     "return_badge": "hand back borrowed badges to their owners in the same zone",
     "clone_badge": "copy the badge of someone in your room with your RFID copier (you must be carrying it). target "
-                   "= person id. Takes a second up close; they keep their badge and don't know. Doors then open for "
-                   "the copy, logged under their name. People nearby or a camera may catch the moment.",
+                   "= person id. A second up close; done casually, like supervising their work, it rarely draws a "
+                   "look. They keep their badge and don't know. Doors then open for the copy, logged under their "
+                   "name, but a camera on the door shows who really walked in.",
+    "wipe_cctv": "delete the last 30 minutes of camera footage for a zone. target = zone id. You must be at the "
+                 "director_desk or the cas_desk with nobody else at it. The camera system logs that footage was "
+                 "deleted from that terminal, and people in the room may see you on the camera menus.",
     "message_handler": "send a private message to your handler outside the plant. text = message. The game pauses "
                        "until they reply.",
 }
@@ -56,8 +60,10 @@ DIRECTOR_ACTIONS = {
     "set_output": "set the control room's output target. arg = number 0-110, or 'auto' to follow the test schedule",
     "high_alert": "turn High Alert on or off. arg = on/off. Slows doors, vault needs two badges, every alarm comes "
                   "to you",
-    "audit_badges": "INVESTIGATION. Review the badge ledger for contradictions (2 min)",
-    "pull_cctv": "INVESTIGATION. Review a zone's cameras (1 min). target = zone id",
+    "audit_badges": "INVESTIGATION. Review the badge ledger for contradictions (2 min). Or target = zone id: the "
+                    "raw list of badge swipes at that room's door, last 30 min (1 min)",
+    "pull_cctv": "INVESTIGATION. Review a zone's cameras (1 min): what they caught, who ran, and who came in "
+                 "through the door and when. target = zone id",
     "inspect": "INVESTIGATION. Send someone to a station: they read its change log and reset it to normal. "
                "target = station, arg = person id",
     "cross_check": "INVESTIGATION. Send someone to the test bench to compare true readings with the console. "

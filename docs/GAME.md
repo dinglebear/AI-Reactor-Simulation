@@ -92,7 +92,8 @@ The mock Director interviews the main suspect before an arrest, which is often w
 | Action | Finds | Cost |
 |---|---|---|
 | audit_badges | ledger clues, door alerts | result in 2 min |
-| pull_cctv zone | cctv clues in that zone, run sightings | 1 min; footage may be corrupted if security health < 40 |
+| audit_badges zone | the raw swipes at that room's door, last 30 min (no conclusions: compare them with the cameras yourself) | 1 min |
+| pull_cctv zone | cctv clues in that zone, run sightings, and who came in through the door and when (someone on camera with no swipe of their own badge is for the Director to spot) | 1 min; footage may be corrupted if security health < 40 |
 | inspect station, person | the station log (paper clues) and its current setting; resets it to normal | a staff member walks there and works 60 s |
 | cross_check person | true meters next to the console, every off-normal station, and the rack's log if masked | a staff member works 90 s at the test bench |
 | interview person | testimony, if they choose to tell | they walk to the Director's desk and answer |
@@ -123,6 +124,14 @@ owner is on camera somewhere else). The moment of copying may be seen by people 
 copier is found in a pocket check, it is confiscated along with every copy (a physical clue). A room sweep or a
 rummage can also find it where it's hidden, so the spy decides when to carry it and when to stash it. Only the spy
 is told the copier exists.
+
+## Deleting footage
+
+The spy can `wipe_cctv` a zone from the Director's desk or the alarm station desk, but only if nobody else is
+at that terminal. It deletes the last 30 minutes of that zone's footage: camera clues and door-camera entries. The
+camera system keeps an audit trail of the deletion, which names everyone in the room at the time as suspects, and
+it shows up the next time someone pulls that zone's cameras. People in the room may also see the spy on the camera
+menus.
 
 ## The spy's read on people
 

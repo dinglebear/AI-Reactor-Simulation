@@ -134,3 +134,45 @@ class Copier(unittest.TestCase):
         for p in self.w.people.values():
             if not p.saboteur:
                 self.assertNotIn("copier", system_prompt(self.w, p).lower(), p.id)
+
+
+class CamerasAndWipes(unittest.TestCase):
+    def setUp(self):
+        self.eng = Engine(seed=8, mode="mock", run_dir="runs/test-wipe", human="auto", speed=0.0, quiet=True,
+                          minutes=5, saboteur="IE")
+        self.w = self.eng.world
+        self.spy = self.w.people["U4-MGR-IE"]
+
+    def test_director_gets_raw_entries_and_swipes_to_compare(self):
+        w, spy, d = self.w, self.spy, self.w.director
+        w.plant.health["security"] = 100
+        w.cctv_log.append(dict(t=w.t, zone="Z3", who=spy.id, what="entered"))
+        w.ledger.swipe(w.t, "U4-ME-01", spy.id, "Z3")
+        w.investigate(d, "pull_cctv", "Z3", None)
+        w.investigate(d, "audit_badges", "Z3", None)
+        texts = [x[2]["text"] for x in w.pending_results]
+        self.assertTrue(any("Came in through the door on camera: Mei" in t for t in texts))
+        self.assertTrue(any("Hank's badge" in t for t in texts))
+        self.assertFalse(any("own badge" in c.text for c in w.clues))   # no ready-made conclusion
+
+    def test_wipe_deletes_footage_but_leaves_an_audit_trail(self):
+        w, spy, d = self.w, self.spy, self.w.director
+        w.add_clue("cctv", "Z3", None, "Camera in Z3: a figure at the bus.", [spy.id])
+        spy.zone, spy.station, spy.activity = "Z6", "cas_desk", "working"
+        for q in w.occupants("cas_desk", exclude=spy.id):
+            q.station = None
+        r = self.eng.do(spy, "wipe_cctv", "Z3", "", "", "walk")
+        self.assertIn("deleted", r)
+        self.assertFalse(any(c.type == "cctv" and c.zone == "Z3" for c in w.clues))
+        w.plant.health["security"] = 100
+        w.investigate(d, "pull_cctv", "Z3", None)
+        trail = [c for c in w.clues if c.type == "paper" and "deleted" in c.text]
+        self.assertTrue(trail and trail[0].found)
+        self.assertIn(spy.id, trail[0].suspects)
+
+    def test_wipe_needs_an_empty_terminal(self):
+        spy = self.spy
+        spy.zone, spy.station = "Z2", "director_desk"
+        self.w.director.station = "director_desk"
+        self.w.director.activity = "working"
+        self.assertIn("someone else", self.w.wipe_cctv(spy, "Z3"))
