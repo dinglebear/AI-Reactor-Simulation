@@ -101,6 +101,23 @@ The mock Director interviews the main suspect before an arrest, which is often w
 `accuse` detains someone. It is **justified** with two different clue types pointing at them. Arresting the
 saboteur wins. Two wrong arrests lose. `scram` ends the game: forgiven only if MELTDOWN was really ≥ 60.
 
+## People: motives, opinions and the bonus
+
+Corporate has promised everyone a cash bonus if Unit 4 passes all three stages, and a SCRAM or failed stage means
+no bonus. Each person has a motive (`MOTIVE` in `meltdown/cast.py`): some want the bonus badly, some put safety
+first, some want a promotion, some protect their team, some just want to go home. The four managers each have their
+own persona; the spy's motive is only their cover.
+
+Everyone starts with opinions of about a dozen coworkers: their department, the managers, the Director and a few
+others. Most opinions follow the other person's reputation ("a yes-man", "rude and loud, but honest", "very kind"),
+and about a third are personal history ("they took credit for your work once", "you have lunch together"), drawn
+fresh from the game seed. Yes-men, people pleasers and brown-nosers exist, and nobody is told who to ask.
+
+None of this scripts anything. The prompt only tells each agent what they want and what they think of people, and
+that they can agree, argue, push back on a boss or go along. Whether a scare turns into an argument between the
+bonus crowd and the safety crowd is up to the models. The viewer shows each person's motive and opinions on their
+profile.
+
 ## Who decides what
 
 In `--live` runs every person is a Claude agent, and the engine never moves or acts for them: alarms, the break

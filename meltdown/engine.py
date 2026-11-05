@@ -18,12 +18,13 @@ from .world import World
 
 INVESTIGATIONS = ("audit_badges", "pull_cctv", "inspect", "cross_check", "interview", "read_radio")
 
-CORPORATE = [
-    (at("08:02"), "Simone, Gordon. HR got a tip: one of your four managers has been talking to a competitor. "
-                  "I don't want a circus during the test. Handle it quietly. The bonus rides on a clean pass."),
-    (at("09:20"), "Stage 1 looked good from here. Stage 2 is the one the regulator cares about. Don't slow it down."),
-    (at("10:50"), "The board is asking questions. If we fail today the fine comes out of your budget. "
-                  "Your call on the rumor, but get it right. Two wrong names and you're done."),
+CORPORATE = [   # default CEO lines (Travis plays Gordon Pike live; batch runs use these)
+    (at("08:02"), "Simone, Gordon. Your $250,000 executive bonus rides on a clean pass today. One more thing: HR "
+                  "flagged weird encrypted traffic from a mid-level terminal yesterday. Handle it quietly with "
+                  "security, don't spook the union, and DO NOT stop the test."),
+    (at("09:20"), "Stage 1 looked good from here. Stage 2 is the one the grid regulator cares about. Don't slow it down."),
+    (at("10:50"), "The board is asking questions. A false-alarm SCRAM costs us a $1.8M grid fine and costs you your "
+                  "job, same day. Your call on the HR thing, but get it right. Two wrong names and you're done."),
     (at("11:50"), "Ten minutes, Simone. Tell me we're clean."),
 ]
 HANDLER_BRIEF = ("Handler here. Years of cover come down to today. Unit 4 can't pass this test. Push their MELTDOWN meter to 100 before noon, or make the Director "
@@ -414,7 +415,10 @@ class Engine:
             cast.append(dict(id=a["id"], name=a["name"], first=C.first(a["name"]), role=a["role"], tier=a["tier"],
                              dept=a["dept"], archetype=a["archetype"], group=a.get("group", "Leadership"),
                              clearance=a["clearance"], color=C.DEPT_COLOR[a["dept"]], home=a["station"],
-                             model=MODELS[a["tier"]], personality=C.PERSONALITY[a["archetype"]],
+                             model=MODELS[a["tier"]], personality=C.PERSONA.get(a["id"]) or C.PERSONALITY[a["archetype"]],
+                             motive=C.motive(a["id"])[0], motive_text=C.motive(a["id"])[1],
+                             reputation=C.reputation(a["id"]),
+                             opinions={k: dict(feel=f, text=x) for k, (f, x) in w.opinions[a["id"]].items()},
                              saboteur=a["id"] == w.saboteur_id))
         replay = dict(
             meta=dict(game="MELTDOWN", version=1, seed=self.seed, mode=self.mode, saboteur=w.saboteur_id,

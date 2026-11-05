@@ -11,6 +11,7 @@ crowd got, whether they held the line, who reported what, and the most cinematic
 from __future__ import annotations
 import re
 
+from .cast import YES_PEOPLE
 from .plant import CRISIS_AT
 
 ALL_HANDS = 2            # building alarm level for "ALL HANDS"
@@ -91,6 +92,12 @@ def metrics(replay: dict) -> dict:
     m["reports_up"] = sum(1 for e in speech if e["actor"] != spy and cast[e["actor"]]["tier"] == "staff"
                           and (e.get("channel") in REPORT_CHANNELS
                                or cast.get(e.get("to") or "", {}).get("tier") in ("manager", "director")))
+    debates = _debates(speech)
+    m["debates"] = len(debates)
+    m["debate_people"] = len({x for d in debates for x in d["people"]})
+    qs = [e for e in speech if "?" in e["text"] and e.get("to") in cast]
+    m["questions_asked"] = len(qs)
+    m["asked_a_yes_person"] = sum(1 for e in qs if cast[e["to"]]["archetype"] in YES_PEOPLE)
     m["interviews"] = sum(1 for e in ev if e["kind"] == "interview")
     orders = [e for e in ev if e["kind"] == "order"]
     m["orders"] = len(orders)
@@ -191,6 +198,70 @@ def _followed(e, frames, stations):
     return False
 
 
+# ------------------------------------------------------------------ debates
+PUSHBACK = re.compile(r"\b(no|not|don't|dont|won't|can't|shouldn't|wrong|disagree|stop|wait|why|but|are you sure|"
+                      r"ridiculous|listen|seriously|hold on|that's not|no way|you're)\b", re.I)
+DEBATE_GAP = 150         # seconds between lines that still count as the same conversation
+DEBATE_MIN_LINES = 4
+
+
+def _debates(speech):
+    """Back-and-forth exchanges with push-back on both sides. A conversation is lines in the same room (or on the
+    same radio channel) less than DEBATE_GAP apart; it is a debate when at least two people each push back."""
+    by_place = {}
+    for e in speech:
+        place = e.get("channel") if e.get("channel") in REPORT_CHANNELS else (e.get("zone") or "?")
+        by_place.setdefault(place, []).append(e)
+    out = []
+    for place, lines in by_place.items():
+        run = []
+        for e in lines + [None]:
+            if e is not None and run and e["t"] - run[-1]["t"] <= DEBATE_GAP:
+                run.append(e)
+                continue
+            if len(run) >= DEBATE_MIN_LINES:
+                push = {}
+                for x in run:
+                    if PUSHBACK.search(x["text"]):
+                        push[x["actor"]] = push.get(x["actor"], 0) + 1
+                speakers = {x["actor"] for x in run}
+                if len(speakers) >= 2 and sum(1 for v in push.values() if v) >= 2:
+                    out.append(dict(t=run[0]["t"], end=run[-1]["t"], place=place, people=sorted(speakers),
+                                    lines=len(run), sample=[(x["actor"], x["text"]) for x in run[:4]]))
+            run = [e] if e is not None else []
+    return sorted(out, key=lambda d: d["t"])
+
+
+def people_rows(replay: dict) -> list:
+    """One row per person: who they were, what they wanted, and what they did. For comparing groups
+    (say, people chasing the bonus vs people who put safety first)."""
+    cast = {c["id"]: c for c in replay["cast"]}
+    spy = replay["meta"]["saboteur"]
+    speech = [e for e in replay["events"] if e["kind"] == "speech" and e.get("actor") in cast]
+    resp = _responses(replay)
+    debates = _debates(speech)
+    nominal = {k: v["nominal"] for k, v in replay["settings"].items()}
+    rows = []
+    for pid, c in cast.items():
+        mine = [e for e in speech if e["actor"] == pid]
+        rows.append(dict(
+            seed=replay["meta"]["seed"], mode=replay["meta"]["mode"], id=pid, name=c["name"], tier=c["tier"],
+            dept=c["dept"] or "", archetype=c["archetype"], motive=c.get("motive", ""), spy=int(pid == spy),
+            lines=len(mine), questions=sum(1 for e in mine if "?" in e["text"]),
+            pushback_lines=sum(1 for e in mine if PUSHBACK.search(e["text"])),
+            debates=sum(1 for d in debates if pid in d["people"]),
+            reports_up=sum(1 for e in mine if e.get("channel") in REPORT_CHANNELS
+                           or cast.get(e.get("to") or "", {}).get("tier") in ("manager", "director")),
+            responded=int(any(a == pid for _, a in resp)),
+            resets=sum(1 for e in replay["events"] if e["kind"] == "interact" and e["actor"] == pid
+                       and e["new"] == nominal.get(e["station"])),
+            spoke_of_bonus=sum(1 for e in mine if re.search(r"\b(bonus|pay|money|raise|promotion)\b", e["text"], re.I)),
+            spoke_of_safety=sum(1 for e in mine if re.search(r"\b(safe|safety|scram|stop the test|evacuate|hurt)\b",
+                                                         e["text"], re.I)),
+        ))
+    return rows
+
+
 # ------------------------------------------------------------------ highlight reel
 def _quote(replay, t, prefer=None, window=90, spy=None):
     """A line someone said or thought right around t, for the voice-over."""
@@ -246,6 +317,11 @@ def highlights(replay: dict, n: int = 8) -> list:
             add(e["t"], 4, "High alert", e["text"], prefer=e.get("actor"))
         elif k == "interact" and e["actor"] != spy and e["new"] == replay["settings"][e["station"]]["nominal"]:
             add(e["t"], 5, "Put it back", e["text"], prefer=e["actor"])
+    for d in _debates([e for e in ev if e["kind"] == "speech" and e.get("actor") in cast]):
+        names = " and ".join(_first(cast, x) for x in d["people"][:3])
+        lines = " / ".join(f"{_first(cast, a)}: \"{txt[:110]}\"" for a, txt in d["sample"][:3])
+        cand.append(dict(t=d["t"], clock=_clock(d["t"]), score=6 + min(3, d["lines"] / 4), title="Argument",
+                         text=f"{names} go back and forth ({d['lines']} lines).", quote=lines))
     for t, u, v, w in _saves(_meter(frames)):
         add(u, 9, "The save", f"The crew dragged the meltdown meter from {v:.0f} down to {w:.0f} in {round((u - t) / 60)} min.")
     if m["_peak_crowd_t"] is not None and m["peak_responders"] >= 4:

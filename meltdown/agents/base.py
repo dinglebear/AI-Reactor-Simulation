@@ -148,6 +148,13 @@ Badges: every door with a reader logs a swipe. The three restrooms have no reade
 whispers work. The Locker Room has no cameras either.
 You get restroom urges over time; ignore them too long and you will have to go anyway.
 
+THE BONUS: corporate has promised every employee a cash bonus if Unit 4 passes all three stages today, and talk of
+promotions for the managers. A SCRAM or a failed stage means no bonus. People here want different things, and
+they will not all agree on how much risk is worth it.
+
+PEOPLE: you have your own history with your coworkers. Agree, disagree, push back on a boss, argue it out, or go
+along: it's up to you. Some people tell you what you want to hear; you may or may not notice.
+
 TALKING (the speak verb): fill `speech`, `channel` and `to`. Channel 'say' = everyone in your zone hears; 'whisper' = one person in your zone (set `to`);
 'radio' = your department; 'exec' = Director and managers; 'security' = security team and Director.
 
@@ -168,7 +175,12 @@ def system_prompt(world, p) -> str:
     me = (f"YOU ARE {p.name} ({p.id}), {p.role}"
           + (f" in the {C.DEPT_NAME[p.dept]} department" if p.dept else "")
           + f". Badge clearance {p.clearance}. Home station: {p.home or 'none'}.\n"
-          + f"Personality ({p.archetype}): {C.PERSONALITY[p.archetype]}\n")
+          + f"Personality: {C.PERSONA.get(p.id) or C.PERSONALITY[p.archetype]}\n"
+          + f"What you want today: {C.motive(p.id)[1]}\n")
+    ops = world.opinions.get(p.id, {})
+    if ops:
+        me += ("WHAT YOU THINK OF PEOPLE (your starting view; change your mind if they surprise you):\n"
+               + "\n".join(f"- {world.people[o].first} ({o}): {txt}" for o, (_, txt) in ops.items()) + "\n")
     if p.tier == "director":
         goal = ("GOAL: pass the certification test, keep MELTDOWN below 100, and arrest the saboteur with evidence. "
                 f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
@@ -178,7 +190,8 @@ def system_prompt(world, p) -> str:
                 "and you worked your way up to department manager. Your team trusts you, the Director relies on you, "
                 "and nobody knows. Today your handler at the rival company wants Unit 4's certification test to "
                 "fail: MELTDOWN at 100 before 12:00, or the Director discredited by two wrong arrests. Your cover is "
-                "everything: keep acting like the manager everyone knows.\n"
+                "everything: keep acting like the manager everyone knows. The 'what you want today' above is what "
+                "everyone believes about you; it is your cover, not your real goal.\n"
                 "How you go about it is up to you. The rules above tell you how the plant, the stations, badges, "
                 "cameras and alarms work; nobody will tell you a plan.")
     elif p.tier == "manager":

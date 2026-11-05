@@ -7,6 +7,7 @@
 Everything lands in experiments/<name>/:
   runs/<seed>/replay.json   one folder per game
   metrics.csv               one row per game (open in Excel / Numbers / Sheets)
+  people.csv                one row per person per game: motive, lines, push-back, debates, reports, response
   summary.md                averages, outcomes and each game's highlight reel with timestamps
   replays.html              every game in one viewer with a run picker, works offline
 
@@ -22,7 +23,7 @@ import statistics
 import sys
 import time
 
-from .analysis import highlights, metrics
+from .analysis import highlights, metrics, people_rows
 from .config import MODELS, SHIFT_MINUTES
 from .engine import Engine
 
@@ -30,14 +31,15 @@ from .engine import Engine
 LEAD = ["seed", "mode", "result", "winner", "ended", "peak_meter", "rooms_sealed", "exposed", "all_hands_at",
         "response_latency_s", "peak_responders", "share_who_responded", "crisis_held", "saves",
         "lines_per_min_calm", "lines_per_min_crisis", "reports_up", "orders_followed", "orders",
-        "stations_reset_by_crew", "mean_minutes_to_reset", "clues_found", "spy_caught_at", "wrong_arrests", "spy"]
+        "stations_reset_by_crew", "mean_minutes_to_reset", "debates", "asked_a_yes_person", "clues_found", "spy_caught_at", "wrong_arrests", "spy"]
 AVERAGE = [("peak_meter", "Peak meltdown meter"), ("response_latency_s", "Seconds from ALL HANDS to first responder"),
            ("peak_responders", "Most people responding at once"), ("share_who_responded", "Share of crew who joined the response"),
            ("crisis_held", "Crises held below 40 again"), ("saves", "Saves (meter down 15+ in 10 min)"),
            ("lines_per_min_calm", "Lines spoken per minute, calm"), ("lines_per_min_crisis", "Lines spoken per minute, crisis"),
            ("reports_up", "Reports up the chain"), ("stations_reset_by_crew", "Stations put back by the crew"),
            ("mean_minutes_to_reset", "Minutes until a sabotaged station was put back"),
-           ("clues_found", "Clues found"), ("wrong_arrests", "Wrong arrests"), ("rooms_sealed", "Rooms sealed")]
+           ("debates", "Debates (back-and-forth with push-back)"),
+           ("asked_a_yes_person", "Questions put to a yes-person"), ("clues_found", "Clues found"), ("wrong_arrests", "Wrong arrests"), ("rooms_sealed", "Rooms sealed")]
 VIEWER_MAX = 12          # each game adds ~2 MB to replays.html
 
 
@@ -56,7 +58,7 @@ def run_batch(seeds, mode="mock", name=None, out="experiments", minutes=SHIFT_MI
     name = name or time.strftime("%Y%m%d-%H%M") + f"-{mode}"
     root = os.path.join(out, name)
     os.makedirs(os.path.join(root, "runs"), exist_ok=True)
-    rows, reels, paths = [], {}, []
+    rows, reels, paths, people = [], {}, [], []
     for i, seed in enumerate(seeds, 1):
         run_dir = os.path.join(root, "runs", f"s{seed}")
         print(f"[{i}/{len(seeds)}] seed {seed} ({mode}) ...", end=" ", flush=True)
@@ -68,13 +70,19 @@ def run_batch(seeds, mode="mock", name=None, out="experiments", minutes=SHIFT_MI
         m.pop("_peak_crowd_t", None)
         rows.append(m)
         reels[seed] = highlights(replay)
+        people += people_rows(replay)
         paths.append(os.path.join(run_dir, "replay.json"))
         print(f"{m['result']} (peak {m['peak_meter']}, {m['peak_responders']} responders) in {time.time() - t0:.0f}s")
-    write_outputs(root, rows, reels, paths, mode, minutes)
+    write_outputs(root, rows, reels, paths, mode, minutes, people)
     return root, rows
 
 
-def write_outputs(root, rows, reels, paths, mode, minutes):
+def write_outputs(root, rows, reels, paths, mode, minutes, people=()):
+    if people:
+        with open(os.path.join(root, "people.csv"), "w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(people[0]))
+            w.writeheader()
+            w.writerows(people)
     cols = LEAD + [k for k in rows[0] if k not in LEAD]
     with open(os.path.join(root, "metrics.csv"), "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols)
@@ -83,7 +91,7 @@ def write_outputs(root, rows, reels, paths, mode, minutes):
     with open(os.path.join(root, "highlights.json"), "w") as fh:
         json.dump(reels, fh, indent=1, ensure_ascii=False)
     with open(os.path.join(root, "summary.md"), "w") as fh:
-        fh.write(summary(rows, reels, mode, minutes))
+        fh.write(summary(rows, reels, mode, minutes, people))
     try:
         from .viewer import bundle
         if len(paths) > VIEWER_MAX:
@@ -103,7 +111,23 @@ def _avg(rows, k):
     return f"{mu:.2f} ± {sd:.2f}" if k.startswith("share") else f"{mu:.1f} ± {sd:.1f}"
 
 
-def summary(rows, reels, mode, minutes):
+def by_motive(people):
+    """Average behaviour per motive (spy left out): does chasing the bonus change what people do?"""
+    groups = {}
+    for r in people:
+        if r["spy"] or r["tier"] == "director" or not r["motive"]:
+            continue
+        groups.setdefault(r["motive"], []).append(r)
+    cols = [("lines", "Lines"), ("pushback_lines", "Push-back lines"), ("debates", "Debates joined"),
+            ("reports_up", "Reports up"), ("responded", "Joined the response"), ("spoke_of_bonus", "Mentions of bonus/pay"),
+            ("spoke_of_safety", "Mentions of safety/SCRAM")]
+    L = ["| Motive | People-games | " + " | ".join(c for _, c in cols) + " |", "|---" * (len(cols) + 2) + "|"]
+    for mot, rs in sorted(groups.items(), key=lambda x: -len(x[1])):
+        L.append(f"| {mot} | {len(rs)} | " + " | ".join(f"{statistics.mean(r[k] for r in rs):.2f}" for k, _ in cols) + " |")
+    return L
+
+
+def summary(rows, reels, mode, minutes, people=()):
     n = len(rows)
     L = [f"# MELTDOWN experiment: {n} {mode} game{'s' if n != 1 else ''}", ""]
     if mode == "mock":
@@ -120,6 +144,9 @@ def summary(rows, reels, mode, minutes):
     L += ["", f"Rooms were sealed by contamination in {sealed} of {n} games, including any where the meltdown itself was stopped.", ""]
     L += ["## How the crew behaved (mean ± sd across games)", "", "| Measure | Value |", "|---|---|"]
     L += [f"| {label} | {_avg(rows, k)} |" for k, label in AVERAGE]
+    if people:
+        L += ["", "## By motive (per person per game, spy and Director left out)", ""] + by_motive(people)
+        L += ["", "Motives are assigned in meltdown/cast.py (MOTIVE). `people.csv` has the per-person rows."]
     L += ["", "## Every game", "",
           "| Seed | Result | Ended | Peak | ALL HANDS | Crowd | Saves | Reports | Resets | Caught at |",
           "|---|---|---|---|---|---|---|---|---|---|"]

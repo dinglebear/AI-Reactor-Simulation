@@ -145,6 +145,7 @@ svg text { font-family: var(--mono); }
   .roomcard { position: static; width: auto; margin: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.opinions{margin:6px 0 0;padding-left:0;list-style:none;font-size:12px;line-height:1.5}.feel.warm{color:#4fb87a}.feel.cold{color:#e05561}.feel.neutral{color:#999}
 </style>
 
 <div id="root"></div>
@@ -440,6 +441,9 @@ function Profile({ D, id, onClose, truth }) {
   return html`<section class="panel profile"><p class="eyebrow">Following</p>
     <div class="name"><span class="av" style=${{ background: c.color }}>${initials(c.name)}</span>${c.name} ${truth && c.saboteur ? html`<span class="chip red">SPY</span>` : null}</div>
     <p>${c.role} · ${c.archetype} · ${c.model} · badge ${c.clearance}</p><p>${c.personality}</p>
+    ${c.motive_text ? html`<p><b>Wants:</b> ${c.motive_text}</p><p><b>Seen as:</b> ${c.reputation}</p>` : null}
+    ${c.opinions ? html`<details><summary>What ${c.first} thinks of people (${Object.keys(c.opinions).length})</summary>
+      <ul class="opinions">${Object.entries(c.opinions).map(([o, v]) => html`<li key=${o}><span class=${"feel " + v.feel}>●</span> <b>${(D.castById[o] || {}).first || o}</b>: ${v.text}</li>`)}</ul></details>` : null}
     <div style=${{ marginTop: "8px" }}><button onClick=${onClose}>Back to the cast</button></div></section>`;
 }
 
