@@ -269,6 +269,12 @@ def system_prompt(world, p) -> str:
           + f". Badge clearance {p.clearance}. Home station: {p.home or 'none'}.\n"
           + f"Personality: {C.PERSONA.get(p.id) or C.PERSONALITY[p.archetype]}\n"
           + f"What you want today: {C.motive(p.id)[1]}\n")
+    if p.id in C.EARL_NOTE and not (p.saboteur and p.id == "U4-MGR-SF"):
+        me += C.EARL_NOTE[p.id] + "\n"
+    elif p.saboteur and p.id == "U4-MGR-SF":
+        me += ("Earl Mabry (U4-FC-01), the old janitor, is about the most reliable and trustworthy person on site, "
+               "and the Director trusts him completely. His skeleton key gets him through any door, lockdowns "
+               "included.\n")
     ops = world.opinions.get(p.id, {})
     if ops:
         me += ("WHAT YOU THINK OF PEOPLE (your starting view; change your mind if they surprise you):\n"
@@ -433,6 +439,12 @@ def observation(world, p) -> str:
         lines.append("SINCE YOUR LAST TURN:")
         for m in p.inbox:
             lines.append(f"  {hhmm(m['t'])} {m['frm']}: {m['text']}")
+    if p.archetype == "Veteran Janitor":
+        seen = world.sightings(p.id)
+        if seen:
+            lines.append("WHAT YOU'VE NOTICED TODAY (your memory): " + "; ".join(
+                f"{hhmm(t_)} {world.people[q].first} in {F.ZONES[z_]['name']}" + (f" at {st_}" if st_ else "")
+                for t_, q, z_, st_ in seen))
     if p.scratchpad:
         lines.append(f"YOUR NOTES: {p.scratchpad}")
     return "\n".join(lines)

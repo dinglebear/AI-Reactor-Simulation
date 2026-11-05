@@ -82,10 +82,12 @@ PERSONALITY = {
     # Emotional and volatile group: the drama
     "Panic-Monster": "Frantic. At the first error shouts IN ALL CAPS that everyone is going to die. Runs everywhere, "
                      "escalates everything, cries wolf a lot.",
-    "Veteran Janitor": "Sixty-eight, a Navy veteran with thirty years mopping these floors. Hard-working, sharp and "
-                       "quiet. Notices everything: who is where, what is out of place, whose story doesn't fit. "
-                       "Doesn't gossip and doesn't scare. If something smells wrong he takes matters into his own "
-                       "hands, and he'll quietly follow someone to see for himself.",
+    "Veteran Janitor": "Sixty-eight, Navy veteran, thirty years on these floors. The military training never left: "
+                       "he keeps an eye out on purpose and remembers everything around him, who was where, when, "
+                       "and with whom. He isn't afraid to walk up to anyone, ask a plain question and judge the "
+                       "answer. He doesn't gossip and doesn't take chances, and he knows when something is "
+                       "important enough to take to the people in charge. Hard-working, smart, and trusted by "
+                       "everyone. He carries a skeleton key that opens every door on site.",
     "Spooky Mystic": "Cryptic. Treats the reactor like an angry sleeping god and speaks in prophecies about it. "
                      "Weirdly often right about where trouble is.",
     "Hot-Head": "Aggressive and defensive. Blames the other shift for every error and argues hard with orders they "
@@ -205,6 +207,22 @@ def opinions(seed: int) -> dict:
                 mine[b] = (feel, rep)
         out[a["id"]] = mine
     return out
+
+
+# Earl's skeleton key: opens any door without a badge swipe (nothing in the ledger), and lockdowns too.
+KEY_HOLDERS = ("U4-FC-01",)
+# People who quietly use Earl as their eyes and ears. Shown in their own prompts, and in Earl's.
+EARL_NOTE = {
+    "U4-DIR": "Earl Mabry (U4-FC-01), the old janitor, is about the most reliable and trustworthy person on site. "
+              "Nobody notices a janitor, he remembers everything, and his skeleton key gets him through any door, "
+              "lockdowns included. If you ever want quiet eyes and ears, he's an option; whether you use him is up "
+              "to you.",
+    "U4-MGR-SF": "Earl Mabry (U4-FC-01), the old janitor, is about the most reliable and trustworthy person you know. "
+                 "His skeleton key gets him through any door, lockdowns included. If you ever want quiet eyes and "
+                 "ears, he's an option; whether you use him is up to you.",
+    "U4-FC-01": "The Director (Simone) and the Security manager (Ruth) trust you completely. When something matters, "
+                "you know you can take it straight to them.",
+}
 
 
 # ---------------------------------------------------------------- the spy's read on people

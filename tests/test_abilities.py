@@ -242,3 +242,21 @@ class SpyPlan(unittest.TestCase):
         self.assertIn("Lie low", observation(w, spy))
         w.outcome = dict(result="CUT_SHORT", winner="nobody", text="Ruth was the spy.")
         self.assertNotIn("Ruth was the spy", exit_interview_prompt(w, w.people["U4-OP-01"]))
+
+
+class Earl(unittest.TestCase):
+    def test_skeleton_key_opens_any_door_without_a_swipe_and_passes_lockdown(self):
+        eng = Engine(seed=11, mode="mock", run_dir="runs/test-earl", human="auto", speed=0.0, quiet=True,
+                     minutes=5, saboteur="RX")
+        w = eng.world
+        earl = w.people["U4-FC-01"]
+        n = len(w.ledger.rows)
+        self.assertTrue(w.cross(earl, "Z6"))            # alarm station: security badges only
+        self.assertEqual(len(w.ledger.rows), n)          # no swipe logged
+        w.lockdown = True
+        self.assertTrue(w.cross(earl, "Z5"))
+        from meltdown.agents.base import system_prompt
+        txt = system_prompt(w, earl).lower()
+        self.assertNotIn("spy", txt)
+        self.assertNotIn("saboteur", txt)
+        self.assertIn("reliable and trustworthy", system_prompt(w, w.director))

@@ -206,7 +206,8 @@ class World:
             self.ev("break", f"{kind.capitalize()} break: {', '.join(names)} head off to {where}.", beat=1)
 
     def clearances(self, p):
-        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges + p.clones if b in self.people]
+        return [p.clearance] + [self.people[b].clearance for b in p.extra_badges + p.clones if b in self.people] + (
+            ["KEY"] if p.id in C.KEY_HOLDERS else [])
 
     @staticmethod
     def nearest_restroom(zone):
@@ -267,7 +268,7 @@ class World:
         """Walk through a door into `zone`, swiping if it has a reader. Returns False if refused."""
         reader = F.ZONES[zone]["reader"]
         prev = p.zone
-        if reader and self.lockdown and p.id not in self.LOCK_KEYS:
+        if reader and self.lockdown and p.id not in self.LOCK_KEYS and p.id not in C.KEY_HOLDERS:
             self.ev("door_denied", f"{p.first} is stuck at the {F.ZONES[zone]['name']} door: site lockdown",
                     actor=p.id, zone=zone)
             self.deliver(p.id, "Door", f"LOCKDOWN: the {F.ZONES[zone]['name']} door won't open. Only the Director "
@@ -288,7 +289,11 @@ class World:
                     return False
             else:
                 use = self.choose_badge(p, zone, badges)
-                if use is None:
+                keyed = use is None and p.id in C.KEY_HOLDERS     # the skeleton key: no swipe, nothing in the ledger
+                if keyed:
+                    self.ev("key_door", f"{p.first} let himself into the {F.ZONES[zone]['name']} with his key",
+                            actor=p.id, zone=zone, public=False)
+                if use is None and not keyed:
                     self.ledger.swipe(self.t, badges[0], p.id, zone, granted=False)
                     self.ev("door_denied", f"{p.first}'s badge was refused at {F.ZONES[zone]['name']}",
                             actor=p.id, zone=zone)
@@ -297,8 +302,8 @@ class World:
                                  f"{F.ZONES[zone]['name']} ({F.door_rule(zone)}). The refusal was logged.", "see",
                                  wake=True)
                     return False
-                swiped = [use]
-                if self.high_alert and zone == "Z5":
+                swiped = [] if keyed else [use]
+                if swiped and self.high_alert and zone == "Z5":
                     others = [b for b in badges if b != use]
                     companions = [q for q in self.in_zone(prev, exclude=p.id) if q.badge and
                                   F.can_open(C.BY_ID[q.badge]["clearance"], zone)]
@@ -315,7 +320,8 @@ class World:
                         self.security_alert(f"{al}: badge {b} at {zone}", zone)
                     if b != p.id:
                         self.borrowed_swipe(p, b, zone)
-                p.last_badge = use
+                if use:
+                    p.last_badge = use
                 p.wait_until = self.t + F.SWIPE_S
         if zone == "Z4" or prev == "Z4":
             p.wait_until = max(p.wait_until, self.t) + F.AIRLOCK_S
@@ -492,6 +498,20 @@ class World:
                 if sysname and sysname != "output":
                     out[sysname] = out.get(sysname, 0) + 1
         return out
+
+    def sightings(self, pid, limit=15):
+        """A sharp memory: who this person has seen, where and when (from the presence samples)."""
+        mine = {t: z for (t, q, z, _) in self.presence if q == pid}
+        out, last = [], {}
+        for (t, q, z, st) in self.presence:
+            if q == pid or mine.get(t) != z or self.people[q].detained:
+                continue
+            key = (z, st)
+            if last.get(q) == key:
+                continue
+            last[q] = key
+            out.append((t, q, z, st))
+        return out[-limit:]
 
     def sample_presence(self):
         for p in self.people.values():

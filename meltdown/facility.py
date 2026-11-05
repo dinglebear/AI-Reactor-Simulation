@@ -181,7 +181,7 @@ def reachable(clearances, zone: str) -> bool:
 def can_open(clearance: str, zone: str) -> bool:
     """Badge levels: L1, L1-U (custodian universal), L2, L3, L4, with optional -SEC suffix."""
     need = ZONES[zone]["reader"]
-    if need is None:
+    if need is None or clearance == "KEY":      # KEY = a physical skeleton key: opens any door, no swipe
         return True
     sec = clearance.endswith("-SEC")
     lvl = clearance.replace("-SEC", "")
