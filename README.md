@@ -102,3 +102,7 @@ usage at the end. Use `--minutes` for short test runs.
 ```bash
 python -m unittest discover tests
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE). The vendored React and htm files in `viewer/vendor/` keep their own licenses.
