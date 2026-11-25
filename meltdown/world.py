@@ -1307,12 +1307,17 @@ class World:
     def _listen_noticed(self, p: Person, key: str, chance=None):
         """Doing it in public turns heads: anyone nearby may notice the chatter on the wrong channel."""
         here = [q for q in self.in_zone(p.zone, exclude=p.id) if q.activity != "restroom"]
+        seen = self.__dict__.setdefault("_listen_seen", set())
+        session = (p.id, key, p.listening.get(key))
         for q in here:
+            if (q.id,) + session in seen:      # one notice per onlooker per listening session
+                continue
             pr = self.NOTICE_P.get(q.group, 0.5) * (0.6 if chance is None else chance * 3)
             if self.rng.random() < pr:
                 p.suspicion += 2
                 if p.saboteur:
                     self.sab_heat += 2
+                seen.add((q.id,) + session)
                 self.add_clue("testimony", p.zone, None, f"{q.first} heard {self.channel_name(key)} chatter coming "
                               f"from {p.first}'s radio at {hhmm(self.t)}, which isn't {p.first}'s channel.",
                               [p.id], holder=q.id)

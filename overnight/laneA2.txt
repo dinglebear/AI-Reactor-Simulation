@@ -1,0 +1,2 @@
+6 classic 106 --spy-model claude-opus-5-5
+8 pair 108

@@ -286,6 +286,8 @@ class Engine:
     HANDLER_CHECKINS = ["08:20", "09:05", "10:05", "11:05"]
     QUIET_HANDLER = ("Handler. It's {clock} and from out here Unit 4 looks fine. Years of cover were for today, not "
                      "for next year. You know these people better than anyone. What's your play?")
+    STILL_QUIET_HANDLER = ("Handler. It's {clock}. From out here nothing has moved at Unit 4, and my people are asking "
+                           "whether you're still with us. Noon comes either way. What are you doing about it?")
     BUSY_HANDLER = "Handler. We're seeing ripples from out here. Good. Keep your head and keep going."
 
     def handler_checkin(self):
@@ -299,7 +301,8 @@ class Engine:
             if sab.detained:
                 continue
             quiet = w.plant.incident < 15 and not any(r["by"] in w.spies for r in w.station_log)
-            default = (self.QUIET_HANDLER if quiet else self.BUSY_HANDLER).format(clock=hhmm(w.t))
+            line = self.QUIET_HANDLER if w.t < 3600 else self.STILL_QUIET_HANDLER
+            default = (line if quiet else self.BUSY_HANDLER).format(clock=hhmm(w.t))
             text = self.desk.handler_checkin(w.t, sab.name, default, self.context())
             w.deliver(sab.id, "Handler", f"[handler] {text}", "secret", wake=True)
             self.log.event(w.t, "handler", f"Handler to {sab.first}: {text}", actor=sab.id, public=False, beat=1)

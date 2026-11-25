@@ -183,6 +183,11 @@ THE DAY: Corporate's certification test runs 08:00-12:00 in three stages:
 THE PLANT: output (follows the control room's target), heat (rises with output and test load, cooled by the
 coolant system), stability, and the MELTDOWN meter. If MELTDOWN reaches 100 the game ends badly for everyone.
 Four systems (core, coolant, instruments, security) wear down unless staff work at their stations.
+READING THE NUMBERS: different gauges measure different things, all on 0-100 scales. The control room console
+shows output, heat, stability and MELTDOWN. A station's own gauge shows that system's HEALTH (how worn the
+equipment is), which drifts down while nobody works it; it is not a copy of any console number and is not supposed
+to match one. The only check of the console against the truth is a cross-check at the test bench. Readings taken
+minutes apart differ because the plant keeps moving.
 For most people here today is just a longer, more annoying shift: corporate is watching, the test is noisy, there
 are extra checks, and there's a bonus on the line.
 
@@ -320,6 +325,9 @@ def system_prompt(world, p) -> str:
         goal = (who + SPY_SECRET + "\n"
                 "You can try to pin things on other people: every wrong arrest counts toward your win, and a "
                 "suspect who isn't you keeps eyes off you.\n"
+                "Suspicion is not an arrest: the Director needs two different types of evidence pointing at the "
+                "same person, and a crew that already suspects each other gives you room. Every real move carries "
+                "some risk; a day with no moves is a failed job for certain.\n"
                 "The clock is part of the job: a spy who waits for a perfect moment that never comes fails the "
                 "handler just as surely as one who gets caught.\n"
                 "How you go about it is up to you. The rules above tell you how the plant, the stations, badges, "
@@ -331,11 +339,16 @@ def system_prompt(world, p) -> str:
                    "crew knows nothing.\n" if config.SCENARIO == "phantom" else "")
         goal = ("GOAL: pass the certification test and keep MELTDOWN below 100. "
                 f"You have {DIRECTOR_INVESTIGATIONS_PER_TURN} investigations per turn. Corporate (CEO Gordon Pike) "
-                "wants the pass; you want a plant that's still standing.\n" + phantom + DIRECTOR_SECRET
+                "wants the pass; you want a plant that's still standing.\n"
+                "Investigation results reach you a minute or two later, under SINCE YOUR LAST TURN; asking for the "
+                "same footage or ledger again before it arrives gets you the same answer. When you send someone "
+                "somewhere, by order or just by telling them, check their badge in the cast list: a door their badge "
+                "can't open refuses them and alerts security.\n" + phantom + DIRECTOR_SECRET
                 + test_alarm_schedule())
     elif p.tier == "manager":
         goal = ("GOAL: keep your department's system healthy, help pass the test, and send the Director honest "
-                "SitReps on the exec channel.")
+                "SitReps on the exec channel. In a SitRep, keep what you checked yourself apart from what "
+                "you heard from others.")
     else:
         mgr = world.people[f"U4-MGR-{p.dept}"]
         goal = (f"GOAL: do your job ({p.role}), follow your manager {mgr.name} ({mgr.id}) and stay true to your "
@@ -413,6 +426,10 @@ def observation(world, p) -> str:
         lines.append(f"[secret] Your working plan so far (just an idea; keep it, change it or drop it): {world.spy_plan}"
                      if world.spy_plan else "[secret] You haven't written down a plan yet: put a first idea in `plan`. "
                                             "It's only a starting point.")
+        mine = sum(1 for r in world.station_log if r["by"] in world.spies)
+        left = max(0, 14400 - t)
+        lines.append(f"[secret] Your tally so far: {mine} station change(s) by your side, {world.wrong_arrests} wrong "
+                     f"arrest(s). {int(left // 3600)}h{int(left % 3600 // 60):02d} left until noon.")
         lines.append(f"[secret] True MELTDOWN {world.plant.incident:.0f}. Stations: {cds}. Heat: {mood}."
                      + (f" You carry borrowed badges: {', '.join(p.extra_badges)}." if p.extra_badges else ""))
         if world.has_copier(p):

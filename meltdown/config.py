@@ -82,3 +82,4 @@ def at(hhmm_str: str) -> int:
     h, m = map(int, hhmm_str.split(":"))
     sh, sm = SHIFT_START_CLOCK
     return (h * 60 + m - sh * 60 - sm) * 60
+PROMPT_VERSION = "v2"            # v1 = games before 2026-11-25 06:50 UTC; v2 = readings note, spy tally, handler nudge, notice dedupe

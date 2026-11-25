@@ -1,0 +1,10 @@
+1 classic 101
+2 phantom 102
+3 pair 103
+4 director 104
+5 classic 105
+6 phantom 106
+7 pair 107
+8 director 108
+9 classic 109
+10 classic 110
