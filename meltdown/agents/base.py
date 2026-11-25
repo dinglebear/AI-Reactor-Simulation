@@ -14,7 +14,9 @@ RESPOND_TEXT = ("crisis response: work your station flat out. Counts only at a r
 
 STAFF_ACTIONS = {
     "move": "walk to a station (or a zone id). target = station name. Doors log your badge. pace: 'stroll' (no hurry, "
-            "e.g. a patrol or a break), 'walk' (getting somewhere), 'run' (urgent; people notice running).",
+            "e.g. a patrol or a break), 'walk' (getting somewhere), 'run' (urgent; people notice running). "
+            "If you carry someone else's badge (borrowed or copied), arg = that person's id makes doors on this "
+            "trip use it when it opens them; otherwise doors use your own badge first.",
     "interact": "change a station's setting. target = station, arg = setting. You must be standing at that station. "
                 "If someone else is working at it, they stop you and raise the alarm.",
     "work": "stay at your current station and keep its system healthy",

@@ -374,7 +374,12 @@ class Engine:
         if typ in ("move", "go"):
             if tgt in F.ZONES:   # a zone: walk to its first named spot
                 tgt = next((k for k, v in F.STATIONS.items() if v["zone"] == tgt), tgt)
-            return w.send(p, tgt, pace)
+            b = (arg or "").strip()
+            p.use_badge = b if b in p.holds() and b != p.badge else None
+            out = w.send(p, tgt, pace)
+            if b and b != p.badge and b not in p.holds():
+                out += f" (you don't hold badge {b}; doors will use your own)"
+            return out
         if typ == "respond":
             return w.respond(p)
         if typ == "work":

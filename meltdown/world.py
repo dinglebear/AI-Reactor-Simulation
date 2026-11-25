@@ -51,6 +51,7 @@ class Person:
     detained: bool = False
     pending: dict | None = None    # e.g. badge request or interview question waiting for an answer
     last_badge: str | None = None  # badge used on the last door; stations log changes under it
+    use_badge: str | None = None   # badge this person chose to swipe with (move arg), if they hold it
     order: str | None = None       # last order from a manager / Director
     listening: dict = field(default_factory=dict)  # channel -> until (eavesdropping on a channel that isn't yours)
     carrying: list = field(default_factory=list)   # small things picked up or taken (not badges)
@@ -347,6 +348,9 @@ class World:
         return True
 
     def choose_badge(self, p, zone, badges):
+        pick = p.use_badge
+        if pick and pick in badges and F.can_open(C.BY_ID[pick]["clearance"], zone):
+            return pick
         own = [b for b in badges if b == p.id and F.can_open(C.BY_ID[b]["clearance"], zone)]
         if own:
             return own[0]
