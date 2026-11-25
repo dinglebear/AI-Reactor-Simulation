@@ -4,6 +4,7 @@ import random
 import sys
 import time
 
+from . import config
 from . import cast as C
 from . import facility as F
 from .agents.base import actions_for, DIRECTOR_ACTIONS
@@ -573,7 +574,7 @@ class Engine:
                       outcome=o, grade=grade, test_passed=w.plant.test_passed(),
                       test_status=("passed" if w.plant.test_passed() else "failed") if w.t >= self.end_t - STEP_S
                       else "incomplete", duration_s=w.t,
-                      shift_start="08:00", frame_s=FRAME_EVERY_S, models=MODELS,
+                      shift_start="08:00", frame_s=FRAME_EVERY_S, models=MODELS, prompt_version=config.PROMPT_VERSION,
                       wall_s=round(time.time() - self.wall_start, 1),
                       usage=getattr(self.brain, "usage", None), spy_plans=w.spy_plans),
             zones={k: dict(v) for k, v in F.ZONES.items()},

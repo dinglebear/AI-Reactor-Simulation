@@ -32,7 +32,7 @@ for d in sorted(glob.glob(os.path.join(ROOT, "g*/"))):
     arrests = [e for e in ev if e["kind"] == "arrest"]
     games.append(dict(
         n=int(os.path.basename(d.rstrip("/"))[1:]), scenario=meta.get("scenario", "classic"), seed=meta["seed"],
-        prompt=meta.get("prompt_version", "v1"),
+        prompt=meta.get("prompt_version") or ("v1" if int(os.path.basename(d.rstrip("/"))[1:]) <= 5 else "v2" if int(os.path.basename(d.rstrip("/"))[1:]) <= 9 else "v2.1"),
         spies=[dict(name=cast[s]["name"], first=cast[s]["first"], role=cast[s]["role"], model=cast[s]["model"]) for s in spies],
         result=meta["outcome"]["result"], outcome=meta["outcome"]["text"], ended=ev[-1]["clock"],
         grade={k: v["minutes"] for k, v in meta["grade"].items()},
