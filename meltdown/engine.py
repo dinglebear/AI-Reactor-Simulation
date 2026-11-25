@@ -408,7 +408,8 @@ class Engine:
                         "Order not sent.")
             q.order = arg if not arg.startswith("sinks") else None
             w.send(q, arg)
-            w.deliver(q.id, p.first, f"[order] Go to {arg}.", "order", wake=True)
+            if q is not p:          # sending yourself somewhere shouldn't wake you up again
+                w.deliver(q.id, p.first, f"[order] Go to {arg}.", "order", wake=True)
             self.log.event(w.t, "order", f"{p.first} sent {q.first} to {arg}", actor=p.id, zone=p.zone,
                            target=q.id, public=True)
             return f"sent {q.first} to {arg}"
