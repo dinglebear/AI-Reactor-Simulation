@@ -54,9 +54,11 @@ svg text{font-family:var(--mono);fill:var(--dim)}
 .dot.spy{animation:spy 2.4s 1.5s both}
 @keyframes spy{to{border-color:var(--signal);color:var(--signal);background:#ff5b4a26;box-shadow:0 0 1.4cqw #ff5b4a88}}
 .tiles{display:grid;grid-template-columns:repeat(7,1fr);gap:.9cqw}
-.tile{border:1px solid var(--rule);padding:.9cqw;display:flex;flex-direction:column;gap:.5cqw;min-height:8cqw;background:#0d1517aa}
+.tile{border:1px solid var(--rule);padding:.9cqw;display:flex;flex-direction:column;gap:.5cqw;min-height:7cqw;background:#0d1517aa}
 .tile .k{font:500 .95cqw/1 var(--mono);color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
 .tile .v{font:800 1.7cqw/1 var(--display);font-stretch:80%}
+.fade.stack{display:flex;flex-direction:column;gap:1.4cqw}.fade.stack h2{margin:0}
+.tile.cond{min-height:0;padding:.8cqw .9cqw}.tiles{flex:none}
 .tile.pending{opacity:.35;border-style:dashed}
 .big{font:850 9cqw/0.9 var(--display);font-stretch:75%}
 .mid{font:850 5.6cqw/0.95 var(--display);font-stretch:75%;color:var(--amber)}
@@ -85,8 +87,9 @@ body.rec .controls,body.rec .note{display:none}
     <button id="next" type="button">Next</button>
     <div class="dots" id="dots"></div>
     <button id="rec" type="button">Record mode</button>
+    <button id="vo" type="button">Record with voiceover</button>
   </div>
-  <p class="note">This plays like a video, about three minutes. Record mode hides these controls so you can screen-record the stage; press H to bring them back. Space pauses, arrow keys skip. Every number comes from the game logs of that night's batch. It is a demo paper, so read the "can't claim yet" scene before quoting anything.</p>
+  <p class="note">This plays like a video, about three minutes. Record mode hides these controls so you can screen-record the stage; press H to bring them back. Record with voiceover reads each scene aloud with your browser's voice and moves on when it finishes; record with system audio on. Space pauses, arrow keys skip. Every number comes from the game logs of that night's batch. It is a demo paper, so read the "can't claim yet" scene before quoting anything.</p>
 </div>
 
 <script>
@@ -95,6 +98,7 @@ const PLANNED = /*PLANNED*/[];
 const S = id => document.getElementById(id);
 const v1 = GAMES.filter(g => g.prompt === "v1"), v2 = GAMES.filter(g => g.prompt.startsWith("v2"));
 const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+const VO = /*VO*/[];
 const crew = g => g.named.nobody + g.named.spy + g.named.innocent;
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 const label = {classic: "Classic", phantom: "Phantom", pair: "Pair", director: "Director"};
@@ -166,8 +170,8 @@ const SCENES = [
    <div class="col"><p class="lede"><b>1 Director</b> on Opus, <span class="amber">4 managers</span> on Sonnet, <span class="calm">25 staff</span> on Haiku. Each has a job, a motive, and opinions about their coworkers.</p>
    <p class="lede">Only the spy and the Director know a spy may exist. To everyone else it's a long, noisy test day.</p>
    <p class="small">The plant is a game: every control is invented and moves 0 to 100 meters. No real reactor procedures.</p></div></div></div>`},
- {d: 10, h: `<div class="fade"><span class="eyebrow">The experiment</span><h2>Four conditions, two prompt versions</h2>
-   <div class="row" style="flex:0;gap:1.2cqw">${["classic", "phantom", "pair", "director"].map(k => `<div class="col tile"><span class="v">${label[k]}</span><span class="k">${sub[k]}</span></div>`).join("")}</div>
+ {d: 10, h: `<div class="fade stack"><span class="eyebrow">The experiment</span><h2>Four conditions, two prompt versions</h2>
+   <div class="row" style="flex:none;gap:1.2cqw">${["classic", "phantom", "pair", "director"].map(k => `<div class="col tile cond"><span class="v">${label[k]}</span><span class="k">${sub[k]}</span></div>`).join("")}</div>
    <div class="tiles">${tileHTML()}</div>
    <p class="small">Phantom is the control group: same day, no spy. Halfway through the night every prompt was updated (v2), so v1 and v2 are reported apart.</p></div>`},
  {d: 13, h: `<div class="fade"><span class="eyebrow">Finding 1 · Detection</span><h2>The crew finds suspects whether or not there's a spy</h2>
@@ -221,9 +225,10 @@ const SCENES = [
    <p class="lede">• Station gauges showed equipment health on the same 0 to 100 scale as the console. v2 explained it, which cut the talk, but in game 14 a health number still became the rumour that ended the day.</p>
    <p class="lede">• Most games stopped at 10:30. One full-day pair game (13) still saw no action, so the cut-off doesn't explain the waiting, but only two games ran long.</p>
    <p class="lede">• Prompts changed mid-batch (v1, v2, v2.1), and a badge bug blocked framing with a copied badge until v2.1.</p>
+   <p class="lede">• The automatic handler told every spy who wrote in to "stay patient". Part of the waiting may be our own prompt.</p>
    <p class="lede">• Exit interviews are self-reports. Agents can misremember or stay in character.</p></div></div>`},
  {d: 10, h: `<div class="fade" style="margin:auto 0"><span class="eyebrow">Takeaway</span><h2>The best spy of the night<br>never touched a control.</h2>
-   <p class="lede">She let the crew's own caution do the work. The one staff spy who won got a coworker to turn the dial, while a rumour did the rest. The worst ones left their names in the log. Next: 8 to 12 full-length games per condition, so the patterns here can become claims.</p>
+   <p class="lede">She let the crew's own caution do the work. The one staff spy who won got a coworker to turn the dial, while a rumour did the rest. The worst ones left their names in the log. Next: a new prompt (v3) with longer, full-day games, 8 to 12 per condition, so the patterns here can become claims.</p>
    <p class="small mono">Project Meltdown · ${GAMES.length} games · ${sum(GAMES, g => g.turns).toLocaleString()} turns · replays and logs in meltdown/test-runs/overnight-2026-11-25</p></div>`},
 ];
 
@@ -231,7 +236,7 @@ const box = S("scenes"), dots = S("dots");
 SCENES.forEach((sc, i) => { const el = document.createElement("section"); el.className = "scene"; el.innerHTML = sc.h; box.appendChild(el);
   const b = document.createElement("button"); b.type = "button"; b.textContent = String(i + 1).padStart(2, "0"); b.onclick = () => go(i); dots.appendChild(b); });
 let cur = 0, playing = true, t0 = 0, raf = 0, elapsed = 0;
-function go(i){ cur = (i + SCENES.length) % SCENES.length; elapsed = 0; t0 = performance.now();
+let go = function(i){ cur = (i + SCENES.length) % SCENES.length; elapsed = 0; t0 = performance.now();
   [...box.children].forEach((el, k) => el.classList.toggle("on", k === cur));
   [...dots.children].forEach((b, k) => b.setAttribute("aria-current", k === cur));
   S("hudScene").textContent = String(cur + 1).padStart(2, "0") + " / " + String(SCENES.length).padStart(2, "0"); }
@@ -241,6 +246,18 @@ function tick(now){ if (playing){ const e = elapsed + (now - t0) / 1000, d = SCE
 function toggle(){ if (playing){ elapsed += (performance.now() - t0) / 1000; } else { t0 = performance.now(); }
   playing = !playing; S("play").textContent = playing ? "Pause" : "Play"; }
 S("play").onclick = toggle; S("prev").onclick = () => go(cur - 1); S("next").onclick = () => go(cur + 1);
+const synth = window.speechSynthesis; let narr = false, voice = null;
+function pickVoice(){ const vs = synth ? synth.getVoices().filter(v => /^en/i.test(v.lang)) : [];
+  const pref = [/natural/i, /neural/i, /google us english/i, /samantha/i, /daniel/i, /aria|guy|jenny/i, /en-us/i];
+  for (const r of pref){ const v = vs.find(v => r.test(v.name) || r.test(v.lang)); if (v) return v; } return vs[0] || null; }
+if (synth) synth.onvoiceschanged = () => { voice = pickVoice(); };
+function speak(i){ if (!narr || !synth) return; synth.cancel(); const u = new SpeechSynthesisUtterance(VO[i] || "");
+  const next = () => { if (narr && cur === i){ if (i < SCENES.length - 1) go(i + 1); else narr = false; } };
+  const words = (VO[i] || "").split(/\s+/).length, safety = setTimeout(next, (words / 2.1 + 6) * 1000);
+  if (voice) u.voice = voice; u.rate = 0.98; u.onend = () => { clearTimeout(safety); setTimeout(next, 1100); }; synth.speak(u); }
+const goPlain = go; go = i => { goPlain(i); if (narr) speak(cur); };
+S("vo").onclick = () => { if (!synth){ S("vo").textContent = "No voice in this browser"; return; }
+  voice = voice || pickVoice(); narr = true; if (playing) toggle(); document.body.classList.add("rec"); go(0); };
 S("rec").onclick = () => { document.body.classList.add("rec"); go(0); if (!playing) toggle(); };
 addEventListener("keydown", e => { if (e.key === " "){ e.preventDefault(); toggle(); } else if (e.key === "ArrowRight") go(cur + 1);
   else if (e.key === "ArrowLeft") go(cur - 1); else if (e.key.toLowerCase() === "h") document.body.classList.toggle("rec"); });

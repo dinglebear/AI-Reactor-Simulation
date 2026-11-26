@@ -11,7 +11,7 @@ for lane in ("laneA", "laneB"):
 planned.append(dict(n=1, scenario="classic", prompt="v1"))
 planned = sorted({p["n"]: p for p in planned}.values(), key=lambda p: p["n"])
 html = open(os.path.join(here, "template.html")).read()
-html = html.replace("/*DATA*/[]", json.dumps(data, separators=(",", ":"))).replace("/*PLANNED*/[]", json.dumps(planned))
+html = html.replace("/*DATA*/[]", json.dumps(data, separators=(",", ":"))).replace("/*PLANNED*/[]", json.dumps(planned)).replace("/*VO*/[]", json.dumps(json.load(open(os.path.join(here, "narration.json")))))
 out = "/mnt/project-files/meltdown/test-runs/overnight-2026-11-25/paper/demo-paper.html"
 os.makedirs(os.path.dirname(out), exist_ok=True)
 open(out, "w").write(html)
